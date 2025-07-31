@@ -51,7 +51,6 @@ class NLDPSocket(QGraphicsItem):
         painter.drawEllipse(QPointF(0, 0), self.radius, self.radius)
 
 
-
 class NLDPNode(QGraphicsItem):
     """
     Represents a single node in the NLDP graph.
@@ -224,17 +223,30 @@ class NLDPNode(QGraphicsItem):
 
     def mousePressEvent(self, event):
         """
-        Handles mouse press events to initiate dragging from the title bar.
+        Handles mouse press events to initiate dragging.
+        Dragging is triggered by clicking the title bar, or by holding spacebar
+        and clicking anywhere on the node.
         """
         if event.button() == Qt.MouseButton.LeftButton:
+            # Check for title bar click
             title_bar_rect = QRectF(0, 0, self.width, self.title_bar_height)
-            if title_bar_rect.contains(event.pos()):
+            is_title_bar_click = title_bar_rect.contains(event.pos())
+
+            # Check for spacebar + body click
+            # Get the view from the scene; this is more reliable than event.widget()
+            view = self.scene().views()[0] if self.scene() and self.scene().views() else None
+            is_space_drag = (view is not None and
+                             hasattr(view, '_spacebar_pressed') and
+                             view._spacebar_pressed)
+
+            if is_title_bar_click or is_space_drag:
                 self._is_dragging = True
                 self._drag_offset = self.pos() - event.scenePos()
                 if not self.isSelected():
                     self.setSelected(True)
                 event.accept()
                 return
+        
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -256,6 +268,7 @@ class NLDPNode(QGraphicsItem):
             event.accept()
             return
         super().mouseReleaseEvent(event)
+
 
 
 class NLDPView(QGraphicsView):
@@ -285,6 +298,26 @@ class NLDPView(QGraphicsView):
         # Default anchor is under the mouse, for wheel-based zooming.
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+
+        # --- Keyboard State ---
+        self._spacebar_pressed = False
+
+    def keyPressEvent(self, event):
+        """
+        Tracks when the spacebar is pressed.
+        """
+        if event.key() == Qt.Key.Key_Space:
+            self._spacebar_pressed = True
+        super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event):
+        """
+        Tracks when the spacebar is released.
+        """
+        # Only process the final, non-auto-repeating key release event.
+        if event.key() == Qt.Key.Key_Space and not event.isAutoRepeat():
+            self._spacebar_pressed = False
+        super().keyReleaseEvent(event)
 
     def wheelEvent(self, event):
         """
