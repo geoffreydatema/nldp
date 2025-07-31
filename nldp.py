@@ -10,12 +10,57 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QColor, QPainter, QPen, QPainterPath
 from PySide6.QtCore import Qt, QRectF, QLineF, QPoint, QPointF
 
+class NLDPSocket(QGraphicsItem):
+    """
+    Represents a connection point (socket) on an NLDPNode.
+    It is a child item of a node, so its position is relative to the node.
+    """
+    def __init__(self, parent, radius=5.0, color=None):
+        """
+        Initializes the socket.
+
+        Args:
+            parent (QGraphicsItem): The parent NLDPNode of this socket.
+            radius (float): The radius of the socket circle.
+            color (tuple | list): An (R, G, B) tuple or list for the socket color.
+        """
+        super().__init__(parent)
+
+        # --- Visual Properties ---
+        self.radius = radius
+        if isinstance(color, (tuple, list)) and len(color) == 3:
+            self.color_fill = QColor(*color)
+        else:
+            # Default to orange if no valid color is provided
+            self.color_fill = QColor(255, 165, 0)
+
+    def boundingRect(self):
+        """
+        Returns the bounding rectangle of the socket.
+        """
+        return QRectF(-self.radius, -self.radius,
+                      self.radius * 2, self.radius * 2)
+
+    def paint(self, painter, option, widget=None):
+        """
+        Draws the socket circle.
+        """
+        painter.setBrush(self.color_fill)
+        # Sockets will have no border for a cleaner look
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(QPointF(0, 0), self.radius, self.radius)
+
+
+
 class NLDPNode(QGraphicsItem):
     """
     Represents a single node in the NLDP graph.
-    Handles drawing, interaction, and basic properties.
+    Handles drawing, interaction, and management of its sockets.
     """
-    def __init__(self, title="New Node", width_units=8, height_units=12, show_border=False, color=None, x=0, y=0):
+    def __init__(self, title="New Node", width_units=8, height_units=12,
+                 show_border=False, color=None, x=0, y=0,
+                 left_sockets=0, right_sockets=0, top_sockets=0, bottom_sockets=0,
+                 socket_radius=5.0, socket_color=None):
         """
         Initializes the node.
 
@@ -25,6 +70,14 @@ class NLDPNode(QGraphicsItem):
             height_units (int): The height of the node in grid units.
             show_border (bool): Whether to display the static design border.
             color (tuple | list): An (R, G, B) tuple or list for the node's body color.
+            x (int | float): The initial x-position of the node in the scene.
+            y (int | float): The initial y-position of the node in the scene.
+            left_sockets (int): Number of sockets on the left.
+            right_sockets (int): Number of sockets on the right.
+            top_sockets (int): Number of sockets on the top.
+            bottom_sockets (int): Number of sockets on the bottom.
+            socket_radius (float): The radius for all sockets on this node.
+            socket_color (tuple | list): The color for all sockets on this node.
         """
         super().__init__()
 
@@ -43,24 +96,28 @@ class NLDPNode(QGraphicsItem):
         self.title_bar_height = 1 * self.grid_size # 1 grid unit
         
         # --- Color Management ---
-        # Set the main body color from a tuple/list, defaulting to grey.
         if isinstance(color, (tuple, list)) and len(color) == 3:
             self.color_body = QColor(*color)
         else:
             self.color_body = QColor(50, 50, 50)
-            
-        # Automatically calculate the title bar color to be a lighter shade.
         self.color_title_bar = self.color_body.lighter(130)
-        
         self.color_title_text = QColor(220, 220, 220)
         
         # --- Border Pens ---
         border_thickness = 1.5
         self.color_border = QColor(110, 110, 110)
         self.pen_border = QPen(self.color_border, border_thickness)
-        
-        self.color_border_selected = QColor(240, 240, 240) # Light grey for selection
+        self.color_border_selected = QColor(240, 240, 240)
         self.pen_border_selected = QPen(self.color_border_selected, border_thickness)
+
+        # --- Sockets ---
+        self.socket_radius = socket_radius
+        self.socket_color = socket_color
+        self.left_sockets = []
+        self.right_sockets = []
+        self.top_sockets = []
+        self.bottom_sockets = []
+        self._create_sockets(left_sockets, right_sockets, top_sockets, bottom_sockets)
 
         # --- Interaction State ---
         self._is_dragging = False
@@ -68,23 +125,65 @@ class NLDPNode(QGraphicsItem):
 
         # Set flags for interaction
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
-        # We handle movement manually, so ItemIsMovable is NOT set.
-        self.setAcceptHoverEvents(True) # Needed for cursor changes
-        
-        # Set initial position
+        self.setAcceptHoverEvents(True)
         self.setPos(x, y)
+
+    def _create_sockets(self, num_left, num_right, num_top, num_bottom):
+        """
+        Creates and positions the sockets on the node.
+        """
+        # --- Vertical Sockets (Left/Right) ---
+        available_v_slots = (self.height / self.grid_size) - 1
+        num_left = min(int(available_v_slots), num_left)
+        num_right = min(int(available_v_slots), num_right)
+
+        y_start = self.title_bar_height + self.grid_size / 2
+        
+        for i in range(num_left):
+            socket = NLDPSocket(parent=self, radius=self.socket_radius, color=self.socket_color)
+            y_pos = y_start + (i * self.grid_size)
+            socket.setPos(0, y_pos)
+            self.left_sockets.append(socket)
+
+        for i in range(num_right):
+            socket = NLDPSocket(parent=self, radius=self.socket_radius, color=self.socket_color)
+            y_pos = y_start + (i * self.grid_size)
+            socket.setPos(self.width, y_pos)
+            self.right_sockets.append(socket)
+            
+        # --- Horizontal Sockets (Top/Bottom) ---
+        available_h_slots = self.width / self.grid_size
+        num_top = min(int(available_h_slots), num_top)
+        num_bottom = min(int(available_h_slots), num_bottom)
+
+        # Calculate starting x-position from the right edge
+        x_start_right = self.width - (self.grid_size / 2)
+
+        for i in range(num_top):
+            socket = NLDPSocket(parent=self, radius=self.socket_radius, color=self.socket_color)
+            x_pos = x_start_right - (i * self.grid_size)
+            socket.setPos(x_pos, 0)
+            self.top_sockets.append(socket)
+            
+        for i in range(num_bottom):
+            socket = NLDPSocket(parent=self, radius=self.socket_radius, color=self.socket_color)
+            x_pos = x_start_right - (i * self.grid_size)
+            socket.setPos(x_pos, self.height)
+            self.bottom_sockets.append(socket)
 
     def boundingRect(self):
         """
-        Must be implemented. Returns the bounding rectangle of the item.
+        Returns the bounding rectangle, expanded to include sockets.
         """
-        # Add a small margin to the bounding rect for the border pen
         margin = self.pen_border_selected.width() / 2
-        return QRectF(0 - margin, 0 - margin, self.width + margin*2, self.height + margin*2)
+        socket_margin = self.socket_radius
+        return QRectF(0 - margin - socket_margin, 0 - margin - socket_margin,
+                      self.width + (margin + socket_margin) * 2,
+                      self.height + (margin + socket_margin) * 2)
 
     def paint(self, painter, option, widget=None):
         """
-        Draws the node.
+        Draws the node. Sockets are child items and draw themselves.
         """
         # --- Body ---
         body_path = QPainterPath()
@@ -97,11 +196,9 @@ class NLDPNode(QGraphicsItem):
         # --- Title Bar ---
         painter.setBrush(self.color_title_bar)
         painter.setPen(Qt.PenStyle.NoPen)
-        # First, draw a rounded rect for the full title bar area
         title_rounded_path = QPainterPath()
         title_rounded_path.addRoundedRect(QRectF(0, 0, self.width, self.title_bar_height), self.corner_radius, self.corner_radius)
         painter.drawPath(title_rounded_path)
-        # Second, draw a sharp-cornered rect over the bottom half to hide the lower curves
         unrounder_rect = QRectF(0, self.corner_radius, self.width, self.title_bar_height - self.corner_radius)
         painter.drawRect(unrounder_rect)
 
@@ -110,27 +207,20 @@ class NLDPNode(QGraphicsItem):
         font = painter.font()
         font.setPointSize(10)
         painter.setFont(font)
-        # Add some left padding to the text rectangle
         text_padding = 8
         text_rect = QRectF(text_padding, 0, self.width - text_padding, self.title_bar_height)
         painter.drawText(text_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self.title)
 
         # --- Border ---
-        # The border is drawn last, on top of everything else.
         is_selected = bool(option.state & QStyle.StateFlag.State_Selected)
-        
         if self.show_border or is_selected:
             border_path = QPainterPath()
             border_rect = QRectF(0, 0, self.width, self.height)
             border_path.addRoundedRect(border_rect, self.corner_radius, self.corner_radius)
-            
-            # Use the selection pen if selected, otherwise use the default border pen
             current_pen = self.pen_border_selected if is_selected else self.pen_border
             painter.setPen(current_pen)
-            
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawPath(border_path)
-
 
     def mousePressEvent(self, event):
         """
@@ -141,12 +231,10 @@ class NLDPNode(QGraphicsItem):
             if title_bar_rect.contains(event.pos()):
                 self._is_dragging = True
                 self._drag_offset = self.pos() - event.scenePos()
-                # Ensure the item is selected when dragging from the title bar
                 if not self.isSelected():
                     self.setSelected(True)
                 event.accept()
                 return
-        
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -157,7 +245,6 @@ class NLDPNode(QGraphicsItem):
             self.setPos(event.scenePos() + self._drag_offset)
             event.accept()
             return
-
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
@@ -168,7 +255,6 @@ class NLDPNode(QGraphicsItem):
             self._is_dragging = False
             event.accept()
             return
-            
         super().mouseReleaseEvent(event)
 
 
@@ -423,9 +509,23 @@ class NLDPWindow(QMainWindow):
         self.setCentralWidget(self.view)
 
         # --- Add a test node ---
-        node = NLDPNode(title="Test Node", width_units=8, height_units=8)
-        node2 = NLDPNode(title="Test Node", width_units=8, height_units=12, x=16*10)
+        node = NLDPNode(
+            title="Example Node",
+            width_units=8,
+            height_units=4,
+            left_sockets=2,
+            right_sockets=1
+        )
         self.scene.addItem(node)
+
+        node2 = NLDPNode(
+            title="aaaaaaaa",
+            x=9*16,
+            width_units=7,
+            height_units=13,
+            left_sockets=4,
+            right_sockets=1
+        )
         self.scene.addItem(node2)
 
 
