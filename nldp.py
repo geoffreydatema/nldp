@@ -4,10 +4,172 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QGraphicsView,
     QGraphicsScene,
-    QGraphicsRectItem,
+    QGraphicsItem,
+    QStyle
 )
-from PySide6.QtGui import QColor, QPainter, QPen, QTransform
+from PySide6.QtGui import QColor, QPainter, QPen, QPainterPath
 from PySide6.QtCore import Qt, QRectF, QLineF, QPoint, QPointF
+
+class NLDPNode(QGraphicsItem):
+    """
+    Represents a single node in the NLDP graph.
+    Handles drawing, interaction, and basic properties.
+    """
+    def __init__(self, title="New Node", width_units=8, height_units=12, show_border=False, color=None, x=0, y=0):
+        """
+        Initializes the node.
+
+        Args:
+            title (str): The name to be displayed in the node's title bar.
+            width_units (int): The width of the node in grid units.
+            height_units (int): The height of the node in grid units.
+            show_border (bool): Whether to display the static design border.
+            color (tuple | list): An (R, G, B) tuple or list for the node's body color.
+        """
+        super().__init__()
+
+        # --- Configuration ---
+        self.grid_size = 16
+        # Enforce minimum size to prevent drawing errors
+        width_units = max(1, width_units)
+        height_units = max(2, height_units)
+        self.width = width_units * self.grid_size
+        self.height = height_units * self.grid_size
+        self.title = title
+        self.show_border = show_border
+        
+        # --- Visual Properties ---
+        self.corner_radius = 8.0
+        self.title_bar_height = 1 * self.grid_size # 1 grid unit
+        
+        # --- Color Management ---
+        # Set the main body color from a tuple/list, defaulting to grey.
+        if isinstance(color, (tuple, list)) and len(color) == 3:
+            self.color_body = QColor(*color)
+        else:
+            self.color_body = QColor(50, 50, 50)
+            
+        # Automatically calculate the title bar color to be a lighter shade.
+        self.color_title_bar = self.color_body.lighter(130)
+        
+        self.color_title_text = QColor(220, 220, 220)
+        
+        # --- Border Pens ---
+        border_thickness = 1.5
+        self.color_border = QColor(110, 110, 110)
+        self.pen_border = QPen(self.color_border, border_thickness)
+        
+        self.color_border_selected = QColor(240, 240, 240) # Light grey for selection
+        self.pen_border_selected = QPen(self.color_border_selected, border_thickness)
+
+        # --- Interaction State ---
+        self._is_dragging = False
+        self._drag_offset = QPointF()
+
+        # Set flags for interaction
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
+        # We handle movement manually, so ItemIsMovable is NOT set.
+        self.setAcceptHoverEvents(True) # Needed for cursor changes
+        
+        # Set initial position
+        self.setPos(x, y)
+
+    def boundingRect(self):
+        """
+        Must be implemented. Returns the bounding rectangle of the item.
+        """
+        # Add a small margin to the bounding rect for the border pen
+        margin = self.pen_border_selected.width() / 2
+        return QRectF(0 - margin, 0 - margin, self.width + margin*2, self.height + margin*2)
+
+    def paint(self, painter, option, widget=None):
+        """
+        Draws the node.
+        """
+        # --- Body ---
+        body_path = QPainterPath()
+        body_rect = QRectF(0, 0, self.width, self.height)
+        body_path.addRoundedRect(body_rect, self.corner_radius, self.corner_radius)
+        painter.setBrush(self.color_body)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawPath(body_path)
+
+        # --- Title Bar ---
+        painter.setBrush(self.color_title_bar)
+        painter.setPen(Qt.PenStyle.NoPen)
+        # First, draw a rounded rect for the full title bar area
+        title_rounded_path = QPainterPath()
+        title_rounded_path.addRoundedRect(QRectF(0, 0, self.width, self.title_bar_height), self.corner_radius, self.corner_radius)
+        painter.drawPath(title_rounded_path)
+        # Second, draw a sharp-cornered rect over the bottom half to hide the lower curves
+        unrounder_rect = QRectF(0, self.corner_radius, self.width, self.title_bar_height - self.corner_radius)
+        painter.drawRect(unrounder_rect)
+
+        # --- Title Text ---
+        painter.setPen(self.color_title_text)
+        font = painter.font()
+        font.setPointSize(10)
+        painter.setFont(font)
+        # Add some left padding to the text rectangle
+        text_padding = 8
+        text_rect = QRectF(text_padding, 0, self.width - text_padding, self.title_bar_height)
+        painter.drawText(text_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self.title)
+
+        # --- Border ---
+        # The border is drawn last, on top of everything else.
+        is_selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        
+        if self.show_border or is_selected:
+            border_path = QPainterPath()
+            border_rect = QRectF(0, 0, self.width, self.height)
+            border_path.addRoundedRect(border_rect, self.corner_radius, self.corner_radius)
+            
+            # Use the selection pen if selected, otherwise use the default border pen
+            current_pen = self.pen_border_selected if is_selected else self.pen_border
+            painter.setPen(current_pen)
+            
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawPath(border_path)
+
+
+    def mousePressEvent(self, event):
+        """
+        Handles mouse press events to initiate dragging from the title bar.
+        """
+        if event.button() == Qt.MouseButton.LeftButton:
+            title_bar_rect = QRectF(0, 0, self.width, self.title_bar_height)
+            if title_bar_rect.contains(event.pos()):
+                self._is_dragging = True
+                self._drag_offset = self.pos() - event.scenePos()
+                # Ensure the item is selected when dragging from the title bar
+                if not self.isSelected():
+                    self.setSelected(True)
+                event.accept()
+                return
+        
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        """
+        Handles mouse move events to drag the node.
+        """
+        if self._is_dragging:
+            self.setPos(event.scenePos() + self._drag_offset)
+            event.accept()
+            return
+
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        """
+        Handles mouse release events to stop dragging.
+        """
+        if self._is_dragging and event.button() == Qt.MouseButton.LeftButton:
+            self._is_dragging = False
+            event.accept()
+            return
+            
+        super().mouseReleaseEvent(event)
 
 
 class NLDPView(QGraphicsView):
@@ -260,13 +422,11 @@ class NLDPWindow(QMainWindow):
         # Set the view as the central widget of the main window
         self.setCentralWidget(self.view)
 
-        # --- Add a simple test item ---
-        # This is just to demonstrate that the scene is working.
-        # We will replace this with actual nodes later.
-        test_item = QGraphicsRectItem(0, 0, 128, 192)
-        test_item.setBrush(QColor(50, 50, 50))
-        test_item.setPen(QColor(110, 110, 110))
-        self.scene.addItem(test_item)
+        # --- Add a test node ---
+        node = NLDPNode(title="Test Node", width_units=8, height_units=8)
+        node2 = NLDPNode(title="Test Node", width_units=8, height_units=12, x=16*10)
+        self.scene.addItem(node)
+        self.scene.addItem(node2)
 
 
 if __name__ == "__main__":
