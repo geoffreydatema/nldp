@@ -5,26 +5,35 @@ from PySide6.QtWidgets import (
     QGraphicsView,
     QGraphicsScene,
     QGraphicsItem,
-    QStyle
+    QStyle,
+    QGraphicsPathItem
 )
 from PySide6.QtGui import QColor, QPainter, QPen, QPainterPath
 from PySide6.QtCore import Qt, QRectF, QLineF, QPoint, QPointF
+
+SOCKET_TYPE_INPUT = 0
+SOCKET_TYPE_OUTPUT = 1
 
 class NLDPSocket(QGraphicsItem):
     """
     Represents a connection point (socket) on an NLDPNode.
     It is a child item of a node, so its position is relative to the node.
     """
-    def __init__(self, parent, radius=5.0, color=None):
+    def __init__(self, parent, socket_type, radius=5.0, color=None):
         """
         Initializes the socket.
 
         Args:
             parent (QGraphicsItem): The parent NLDPNode of this socket.
+            socket_type (str): The logical type of the socket (e.g., "INPUT", "OUTPUT").
             radius (float): The radius of the socket circle.
             color (tuple | list): An (R, G, B) tuple or list for the socket color.
         """
         super().__init__(parent)
+
+        # --- Logical Properties ---
+        self.socket_type = socket_type
+        self.connections = []
 
         # --- Visual Properties ---
         self.radius = radius
@@ -51,6 +60,71 @@ class NLDPSocket(QGraphicsItem):
         painter.drawEllipse(QPointF(0, 0), self.radius, self.radius)
 
 
+class NLDPWire(QGraphicsPathItem):
+    """
+    Represents a wire connecting two sockets in the graph.
+    """
+    def __init__(self, start_socket, end_socket, parent=None):
+        """
+        Initializes the wire.
+
+        Args:
+            start_socket (NLDPSocket): The socket where the wire begins.
+            end_socket (NLDPSocket): The socket where the wire ends.
+            parent (QGraphicsItem): The parent item in the scene.
+        """
+        super().__init__(parent)
+        self.start_socket = start_socket
+        self.end_socket = end_socket
+
+        # --- Visual Properties ---
+        self.color = QColor(200, 200, 200)
+        self.thickness = 2.0
+        self.pen = QPen(self.color, self.thickness)
+        self.pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        self.setPen(self.pen)
+        
+        # Ensure the wire is drawn behind nodes
+        self.setZValue(-1)
+
+        # Connect sockets
+        self.start_socket.connections.append(self.end_socket)
+        self.end_socket.connections.append(self.start_socket)
+
+        self.update_path()
+
+    def update_path(self):
+        """
+        Calculates and sets the cubic Bezier path for the wire.
+        """
+        start_pos = self.mapFromScene(self.start_socket.scenePos())
+        end_pos = self.mapFromScene(self.end_socket.scenePos())
+
+        path = QPainterPath()
+        path.moveTo(start_pos)
+
+        # --- Bezier Curve Calculation ---
+        dx = end_pos.x() - start_pos.x()
+        dy = end_pos.y() - start_pos.y()
+        
+        # Control points are halfway horizontally, creating the "S" curve
+        control_point1 = QPointF(start_pos.x() + dx * 0.5, start_pos.y())
+        control_point2 = QPointF(start_pos.x() + dx * 0.5, end_pos.y())
+
+        path.cubicTo(control_point1, control_point2, end_pos)
+        self.setPath(path)
+
+    def __del__(self):
+        """
+        Handles cleanup when the wire is deleted.
+        """
+        # Disconnect sockets
+        if self.end_socket in self.start_socket.connections:
+            self.start_socket.connections.remove(self.end_socket)
+        if self.start_socket in self.end_socket.connections:
+            self.end_socket.connections.remove(self.start_socket)
+
+
 class NLDPNode(QGraphicsItem):
     """
     Represents a single node in the NLDP graph.
@@ -62,27 +136,11 @@ class NLDPNode(QGraphicsItem):
                  socket_radius=5.0, socket_color=None):
         """
         Initializes the node.
-
-        Args:
-            title (str): The name to be displayed in the node's title bar.
-            width_units (int): The width of the node in grid units.
-            height_units (int): The height of the node in grid units.
-            show_border (bool): Whether to display the static design border.
-            color (tuple | list): An (R, G, B) tuple or list for the node's body color.
-            x (int | float): The initial x-position of the node in the scene.
-            y (int | float): The initial y-position of the node in the scene.
-            left_sockets (int): Number of sockets on the left.
-            right_sockets (int): Number of sockets on the right.
-            top_sockets (int): Number of sockets on the top.
-            bottom_sockets (int): Number of sockets on the bottom.
-            socket_radius (float): The radius for all sockets on this node.
-            socket_color (tuple | list): The color for all sockets on this node.
         """
         super().__init__()
 
         # --- Configuration ---
         self.grid_size = 16
-        # Enforce minimum size to prevent drawing errors
         width_units = max(1, width_units)
         height_units = max(2, height_units)
         self.width = width_units * self.grid_size
@@ -92,7 +150,7 @@ class NLDPNode(QGraphicsItem):
         
         # --- Visual Properties ---
         self.corner_radius = 8.0
-        self.title_bar_height = 1 * self.grid_size # 1 grid unit
+        self.title_bar_height = 1 * self.grid_size
         
         # --- Color Management ---
         if isinstance(color, (tuple, list)) and len(color) == 3:
@@ -131,7 +189,6 @@ class NLDPNode(QGraphicsItem):
         """
         Creates and positions the sockets on the node.
         """
-        # --- Vertical Sockets (Left/Right) ---
         available_v_slots = (self.height / self.grid_size) - 1
         num_left = min(int(available_v_slots), num_left)
         num_right = min(int(available_v_slots), num_right)
@@ -139,36 +196,40 @@ class NLDPNode(QGraphicsItem):
         y_start = self.title_bar_height + self.grid_size / 2
         
         for i in range(num_left):
-            socket = NLDPSocket(parent=self, radius=self.socket_radius, color=self.socket_color)
+            socket = NLDPSocket(parent=self, socket_type=SOCKET_TYPE_INPUT, radius=self.socket_radius, color=self.socket_color)
             y_pos = y_start + (i * self.grid_size)
             socket.setPos(0, y_pos)
             self.left_sockets.append(socket)
 
         for i in range(num_right):
-            socket = NLDPSocket(parent=self, radius=self.socket_radius, color=self.socket_color)
+            socket = NLDPSocket(parent=self, socket_type=SOCKET_TYPE_OUTPUT, radius=self.socket_radius, color=self.socket_color)
             y_pos = y_start + (i * self.grid_size)
             socket.setPos(self.width, y_pos)
             self.right_sockets.append(socket)
             
-        # --- Horizontal Sockets (Top/Bottom) ---
         available_h_slots = self.width / self.grid_size
         num_top = min(int(available_h_slots), num_top)
         num_bottom = min(int(available_h_slots), num_bottom)
 
-        # Calculate starting x-position from the right edge
         x_start_right = self.width - (self.grid_size / 2)
 
         for i in range(num_top):
-            socket = NLDPSocket(parent=self, radius=self.socket_radius, color=self.socket_color)
+            socket = NLDPSocket(parent=self, socket_type=SOCKET_TYPE_INPUT, radius=self.socket_radius, color=self.socket_color)
             x_pos = x_start_right - (i * self.grid_size)
             socket.setPos(x_pos, 0)
             self.top_sockets.append(socket)
             
         for i in range(num_bottom):
-            socket = NLDPSocket(parent=self, radius=self.socket_radius, color=self.socket_color)
+            socket = NLDPSocket(parent=self, socket_type=SOCKET_TYPE_OUTPUT, radius=self.socket_radius, color=self.socket_color)
             x_pos = x_start_right - (i * self.grid_size)
             socket.setPos(x_pos, self.height)
             self.bottom_sockets.append(socket)
+
+    def get_all_sockets(self):
+        """
+        Returns a list of all sockets on this node.
+        """
+        return self.left_sockets + self.right_sockets + self.top_sockets + self.bottom_sockets
 
     def boundingRect(self):
         """
@@ -184,7 +245,6 @@ class NLDPNode(QGraphicsItem):
         """
         Draws the node. Sockets are child items and draw themselves.
         """
-        # --- Body ---
         body_path = QPainterPath()
         body_rect = QRectF(0, 0, self.width, self.height)
         body_path.addRoundedRect(body_rect, self.corner_radius, self.corner_radius)
@@ -192,7 +252,6 @@ class NLDPNode(QGraphicsItem):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawPath(body_path)
 
-        # --- Title Bar ---
         painter.setBrush(self.color_title_bar)
         painter.setPen(Qt.PenStyle.NoPen)
         title_rounded_path = QPainterPath()
@@ -201,7 +260,6 @@ class NLDPNode(QGraphicsItem):
         unrounder_rect = QRectF(0, self.corner_radius, self.width, self.title_bar_height - self.corner_radius)
         painter.drawRect(unrounder_rect)
 
-        # --- Title Text ---
         painter.setPen(self.color_title_text)
         font = painter.font()
         font.setPointSize(10)
@@ -210,7 +268,6 @@ class NLDPNode(QGraphicsItem):
         text_rect = QRectF(text_padding, 0, self.width - text_padding, self.title_bar_height)
         painter.drawText(text_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self.title)
 
-        # --- Border ---
         is_selected = bool(option.state & QStyle.StateFlag.State_Selected)
         if self.show_border or is_selected:
             border_path = QPainterPath()
@@ -224,16 +281,11 @@ class NLDPNode(QGraphicsItem):
     def mousePressEvent(self, event):
         """
         Handles mouse press events to initiate dragging.
-        Dragging is triggered by clicking the title bar, or by holding spacebar
-        and clicking anywhere on the node.
         """
         if event.button() == Qt.MouseButton.LeftButton:
-            # Check for title bar click
             title_bar_rect = QRectF(0, 0, self.width, self.title_bar_height)
             is_title_bar_click = title_bar_rect.contains(event.pos())
 
-            # Check for spacebar + body click
-            # Get the view from the scene; this is more reliable than event.widget()
             view = self.scene().views()[0] if self.scene() and self.scene().views() else None
             is_space_drag = (view is not None and
                              hasattr(view, '_spacebar_pressed') and
@@ -251,10 +303,19 @@ class NLDPNode(QGraphicsItem):
 
     def mouseMoveEvent(self, event):
         """
-        Handles mouse move events to drag the node.
+        Handles mouse move events to drag the node and update its wires.
         """
         if self._is_dragging:
             self.setPos(event.scenePos() + self._drag_offset)
+            # --- Update connected wires ---
+            for socket in self.get_all_sockets():
+                for connection in socket.connections:
+                    # Find the wire associated with this connection
+                    for item in self.scene().items():
+                        if isinstance(item, NLDPWire) and \
+                           ((item.start_socket == socket and item.end_socket == connection) or \
+                            (item.start_socket == connection and item.end_socket == socket)):
+                            item.update_path()
             event.accept()
             return
         super().mouseMoveEvent(event)
@@ -270,11 +331,10 @@ class NLDPNode(QGraphicsItem):
         super().mouseReleaseEvent(event)
 
 
-
 class NLDPView(QGraphicsView):
     """
     Custom QGraphicsView for the NLDP editor.
-    Implements custom background drawing, panning, and zooming with limits.
+    Implements custom background drawing, panning, zooming, and wire creation.
     """
     def __init__(self, scene, parent=None):
         super().__init__(scene, parent)
@@ -290,6 +350,13 @@ class NLDPView(QGraphicsView):
         self._last_pan_point = QPoint()
         self._last_zoom_point = QPoint()
         self._zoom_scene_anchor = QPointF()
+        
+        # --- Wire Drawing State ---
+        self.drawing_wire = None
+        self.start_socket = None
+
+        # --- Keyboard State ---
+        self._spacebar_pressed = False
 
         # --- Zoom Limits ---
         self.MIN_ZOOM = 0.2
@@ -298,9 +365,6 @@ class NLDPView(QGraphicsView):
         # Default anchor is under the mouse, for wheel-based zooming.
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
-
-        # --- Keyboard State ---
-        self._spacebar_pressed = False
 
     def keyPressEvent(self, event):
         """
@@ -314,7 +378,6 @@ class NLDPView(QGraphicsView):
         """
         Tracks when the spacebar is released.
         """
-        # Only process the final, non-auto-repeating key release event.
         if event.key() == Qt.Key.Key_Space and not event.isAutoRepeat():
             self._spacebar_pressed = False
         super().keyReleaseEvent(event)
@@ -326,29 +389,37 @@ class NLDPView(QGraphicsView):
         zoom_in_factor = 1.15
         zoom_out_factor = 1 / zoom_in_factor
 
-        # Check if the wheel is scrolled up or down
         if event.angleDelta().y() > 0:
             zoom_factor = zoom_in_factor
         else:
             zoom_factor = zoom_out_factor
 
-        # Get the current scale and calculate the potential new scale
         current_scale = self.transform().m11()
         new_scale = current_scale * zoom_factor
 
-        # Check if the new scale is within the defined limits
         if self.MIN_ZOOM <= new_scale <= self.MAX_ZOOM:
             self.scale(zoom_factor, zoom_factor)
         
         event.accept()
 
-
     def mousePressEvent(self, event):
         """
-        Handles mouse press events to initiate panning or zooming.
-        - Panning: Middle Mouse Button or Alt + Left Mouse Button.
-        - Zooming: Alt + Right Mouse Button.
+        Handles mouse press events to initiate panning, zooming, or wire drawing.
         """
+        # --- Wire Drawing ---
+        # Use event.position().toPoint() instead of deprecated event.pos()
+        item = self.itemAt(event.position().toPoint())
+        if isinstance(item, NLDPSocket):
+            self.start_socket = item
+            self.drawing_wire = QGraphicsPathItem()
+            pen = QPen(QColor(200, 200, 200), 2.0)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            self.drawing_wire.setPen(pen)
+            self.scene().addItem(self.drawing_wire)
+            event.accept()
+            return
+            
+        # --- Panning and Zooming ---
         is_pan_middle = event.button() == Qt.MouseButton.MiddleButton
         is_pan_alt_left = (event.button() == Qt.MouseButton.LeftButton and
                            event.modifiers() == Qt.KeyboardModifier.AltModifier)
@@ -366,43 +437,39 @@ class NLDPView(QGraphicsView):
         if is_zoom_alt_right:
             self._is_zooming = True
             self._last_zoom_point = event.position().toPoint()
-            # Store the scene point that should remain stationary.
             self._zoom_scene_anchor = self.mapToScene(event.position().toPoint())
             self.setCursor(Qt.CursorShape.SizeHorCursor)
             self.setDragMode(QGraphicsView.DragMode.NoDrag)
-            # Set anchor to center for the scaling operation.
             self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
             event.accept()
             return
 
         super().mousePressEvent(event)
 
-    def mouseReleaseEvent(self, event):
-        """
-        Handles mouse release events to stop an interaction (panning or zooming).
-        """
-        if self._is_panning and (event.button() == Qt.MouseButton.MiddleButton or event.button() == Qt.MouseButton.LeftButton):
-            self._is_panning = False
-            self.setCursor(Qt.CursorShape.ArrowCursor)
-            self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
-            event.accept()
-            return
-            
-        if self._is_zooming and event.button() == Qt.MouseButton.RightButton:
-            self._is_zooming = False
-            self.setCursor(Qt.CursorShape.ArrowCursor)
-            self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
-            # Restore the default anchor for wheel-based zooming.
-            self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
-            event.accept()
-            return
-
-        super().mouseReleaseEvent(event)
-
     def mouseMoveEvent(self, event):
         """
-        Handles mouse move events to perform panning or zooming.
+        Handles mouse move events to perform panning, zooming, or updating the drawing wire.
         """
+        # --- Wire Drawing ---
+        if self.drawing_wire:
+            start_pos = self.start_socket.scenePos()
+            end_pos = self.mapToScene(event.position().toPoint())
+            
+            path = QPainterPath()
+            path.moveTo(start_pos)
+            
+            dx = end_pos.x() - start_pos.x()
+            dy = end_pos.y() - start_pos.y()
+        
+            control_point1 = QPointF(start_pos.x() + dx * 0.5, start_pos.y())
+            control_point2 = QPointF(start_pos.x() + dx * 0.5, end_pos.y())
+
+            path.cubicTo(control_point1, control_point2, end_pos)
+            self.drawing_wire.setPath(path)
+            event.accept()
+            return
+
+        # --- Panning and Zooming ---
         if self._is_panning:
             current_pos = event.position().toPoint()
             delta = current_pos - self._last_pan_point
@@ -419,77 +486,87 @@ class NLDPView(QGraphicsView):
             delta = current_pos - self._last_zoom_point
             self._last_zoom_point = current_pos
 
-            # Calculate zoom factor based on horizontal movement
             zoom_factor_delta = 1 + (delta.x() * 0.005)
 
-            # Get current scale and calculate potential new scale
             current_scale = self.transform().m11()
             potential_new_scale = current_scale * zoom_factor_delta
-
-            # Clamp the new scale to the defined limits
             clamped_new_scale = max(self.MIN_ZOOM, min(potential_new_scale, self.MAX_ZOOM))
 
-            # If the scale is already at a limit and we're trying to go further, do nothing.
-            if clamped_new_scale == current_scale:
-                event.accept()
-                return
-                
-            # Calculate the actual zoom factor to apply to reach the clamped scale
-            actual_zoom_factor = clamped_new_scale / current_scale
-
-            # Get the view coordinates of the anchor point before scaling
-            old_view_anchor = self.mapFromScene(self._zoom_scene_anchor)
-
-            # Scale the view using the clamped factor
-            self.scale(actual_zoom_factor, actual_zoom_factor)
-
-            # Get the view coordinates of the anchor point after scaling
-            new_view_anchor = self.mapFromScene(self._zoom_scene_anchor)
-
-            # Calculate the pan required to move the anchor point back to its original view position
-            pan_delta = new_view_anchor - old_view_anchor
-
-            # Apply the corrective pan
-            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() + pan_delta.x())
-            self.verticalScrollBar().setValue(self.verticalScrollBar().value() + pan_delta.y())
+            if clamped_new_scale != current_scale:
+                actual_zoom_factor = clamped_new_scale / current_scale
+                old_view_anchor = self.mapFromScene(self._zoom_scene_anchor)
+                self.scale(actual_zoom_factor, actual_zoom_factor)
+                new_view_anchor = self.mapFromScene(self._zoom_scene_anchor)
+                pan_delta = new_view_anchor - old_view_anchor
+                self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() + pan_delta.x())
+                self.verticalScrollBar().setValue(self.verticalScrollBar().value() + pan_delta.y())
 
             event.accept()
             return
 
         super().mouseMoveEvent(event)
 
+    def mouseReleaseEvent(self, event):
+        """
+        Handles mouse release events to stop an interaction.
+        """
+        # --- Wire Drawing ---
+        if self.drawing_wire:
+            # Hide the ghost wire to check what's underneath
+            self.drawing_wire.hide()
+            end_item = self.itemAt(event.position().toPoint())
+            
+            if isinstance(end_item, NLDPSocket) and self.start_socket != end_item:
+                # --- Create a permanent wire ---
+                wire = NLDPWire(self.start_socket, end_item)
+                self.scene().addItem(wire)
+
+            # Clean up the ghost wire
+            self.scene().removeItem(self.drawing_wire)
+            self.drawing_wire = None
+            self.start_socket = None
+            event.accept()
+            return
+
+        # --- Panning and Zooming ---
+        if self._is_panning and (event.button() == Qt.MouseButton.MiddleButton or event.button() == Qt.MouseButton.LeftButton):
+            self._is_panning = False
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+            self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
+            event.accept()
+            return
+            
+        if self._is_zooming and event.button() == Qt.MouseButton.RightButton:
+            self._is_zooming = False
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+            self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
+            self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+            event.accept()
+            return
+
+        super().mouseReleaseEvent(event)
+
     def drawBackground(self, painter: QPainter, rect: QRectF):
         """
         Overrides the default background drawing to render a grid.
-        
-        Args:
-            painter: The QPainter instance to use for drawing.
-            rect: The exposed rectangle area that needs to be redrawn.
         """
         super().drawBackground(painter, rect)
-
-        # --- Grid Properties (Updated with user values) ---
         grid_size = 16
         major_line_every = 8
         major_line_size = grid_size * major_line_every
         
-        # --- Colors (Updated with user values) ---
         color_minor = QColor(24, 24, 24)
         color_major = QColor(32, 32, 32)
 
-        # --- Pens (Updated with user values) ---
         pen_minor = QPen(color_minor, 1.0)
         pen_major = QPen(color_major, 1.0)
 
-        # Calculate the start points, aligned to the grid.
         left = int(rect.left()) - (int(rect.left()) % grid_size)
         top = int(rect.top()) - (int(rect.top()) % grid_size)
 
-        # --- Prepare lines for batch drawing (more efficient) ---
         lines_minor = []
         lines_major = []
 
-        # --- Vertical Lines ---
         for x in range(left, int(rect.right()), grid_size):
             line = QLineF(x, rect.top(), x, rect.bottom())
             if x % major_line_size == 0:
@@ -497,7 +574,6 @@ class NLDPView(QGraphicsView):
             else:
                 lines_minor.append(line)
         
-        # --- Horizontal Lines ---
         for y in range(top, int(rect.bottom()), grid_size):
             line = QLineF(rect.left(), y, rect.right(), y)
             if y % major_line_size == 0:
@@ -505,10 +581,8 @@ class NLDPView(QGraphicsView):
             else:
                 lines_minor.append(line)
 
-        # --- Draw the lines ---
         painter.setPen(pen_minor)
         painter.drawLines(lines_minor)
-
         painter.setPen(pen_major)
         painter.drawLines(lines_major)
 
@@ -543,7 +617,7 @@ class NLDPWindow(QMainWindow):
 
         # --- Add a test node ---
         node = NLDPNode(
-            title="Example Node",
+            title="input1",
             width_units=8,
             height_units=4,
             left_sockets=2,
@@ -552,14 +626,24 @@ class NLDPWindow(QMainWindow):
         self.scene.addItem(node)
 
         node2 = NLDPNode(
-            title="aaaaaaaa",
-            x=9*16,
+            title="big boi",
+            x=16*16,
             width_units=7,
             height_units=13,
             left_sockets=4,
             right_sockets=1
         )
         self.scene.addItem(node2)
+
+        node3 = NLDPNode(
+            title="input2",
+            y=8*16,
+            width_units=8,
+            height_units=4,
+            left_sockets=1,
+            right_sockets=1
+        )
+        self.scene.addItem(node3)
 
 
 if __name__ == "__main__":
