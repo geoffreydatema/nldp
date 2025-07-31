@@ -6,14 +6,14 @@ from PySide6.QtWidgets import (
     QGraphicsScene,
     QGraphicsRectItem,
 )
-from PySide6.QtGui import QColor, QPainter, QPen
-from PySide6.QtCore import Qt, QRectF, QLineF, QPoint
+from PySide6.QtGui import QColor, QPainter, QPen, QTransform
+from PySide6.QtCore import Qt, QRectF, QLineF, QPoint, QPointF
 
 
 class NLDPView(QGraphicsView):
     """
     Custom QGraphicsView for the NLDP editor.
-    Implements custom background drawing, panning, and zooming.
+    Implements custom background drawing, panning, and zooming with limits.
     """
     def __init__(self, scene, parent=None):
         super().__init__(scene, parent)
@@ -28,6 +28,11 @@ class NLDPView(QGraphicsView):
         self._is_zooming = False
         self._last_pan_point = QPoint()
         self._last_zoom_point = QPoint()
+        self._zoom_scene_anchor = QPointF()
+
+        # --- Zoom Limits ---
+        self.MIN_ZOOM = 0.2
+        self.MAX_ZOOM = 5.0
 
         # Default anchor is under the mouse, for wheel-based zooming.
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
@@ -35,7 +40,7 @@ class NLDPView(QGraphicsView):
 
     def wheelEvent(self, event):
         """
-        Handles mouse wheel events for zooming.
+        Handles mouse wheel events for zooming, respecting zoom limits.
         """
         zoom_in_factor = 1.15
         zoom_out_factor = 1 / zoom_in_factor
@@ -46,7 +51,14 @@ class NLDPView(QGraphicsView):
         else:
             zoom_factor = zoom_out_factor
 
-        self.scale(zoom_factor, zoom_factor)
+        # Get the current scale and calculate the potential new scale
+        current_scale = self.transform().m11()
+        new_scale = current_scale * zoom_factor
+
+        # Check if the new scale is within the defined limits
+        if self.MIN_ZOOM <= new_scale <= self.MAX_ZOOM:
+            self.scale(zoom_factor, zoom_factor)
+        
         event.accept()
 
 
@@ -63,7 +75,6 @@ class NLDPView(QGraphicsView):
                              event.modifiers() == Qt.KeyboardModifier.AltModifier)
 
         if is_pan_middle or is_pan_alt_left:
-            print("move")
             self._is_panning = True
             self._last_pan_point = event.position().toPoint()
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
@@ -74,11 +85,12 @@ class NLDPView(QGraphicsView):
         if is_zoom_alt_right:
             self._is_zooming = True
             self._last_zoom_point = event.position().toPoint()
+            # Store the scene point that should remain stationary.
+            self._zoom_scene_anchor = self.mapToScene(event.position().toPoint())
             self.setCursor(Qt.CursorShape.SizeHorCursor)
             self.setDragMode(QGraphicsView.DragMode.NoDrag)
-            # For drag-zoom, anchor to the view's center and center on the mouse press position.
+            # Set anchor to center for the scaling operation.
             self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
-            self.centerOn(self.mapToScene(event.position().toPoint()))
             event.accept()
             return
 
@@ -114,6 +126,7 @@ class NLDPView(QGraphicsView):
             current_pos = event.position().toPoint()
             delta = current_pos - self._last_pan_point
             self._last_pan_point = current_pos
+            
             self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta.x())
             self.verticalScrollBar().setValue(self.verticalScrollBar().value() - delta.y())
             
@@ -125,12 +138,39 @@ class NLDPView(QGraphicsView):
             delta = current_pos - self._last_zoom_point
             self._last_zoom_point = current_pos
 
-            # Zoom based on horizontal movement
-            zoom_factor = 1 + (delta.x() * 0.005) # Adjust sensitivity with the multiplier
-            
-            # Clamp the zoom factor to prevent extreme zooming
-            if zoom_factor > 0.1 and zoom_factor < 10:
-                 self.scale(zoom_factor, zoom_factor)
+            # Calculate zoom factor based on horizontal movement
+            zoom_factor_delta = 1 + (delta.x() * 0.005)
+
+            # Get current scale and calculate potential new scale
+            current_scale = self.transform().m11()
+            potential_new_scale = current_scale * zoom_factor_delta
+
+            # Clamp the new scale to the defined limits
+            clamped_new_scale = max(self.MIN_ZOOM, min(potential_new_scale, self.MAX_ZOOM))
+
+            # If the scale is already at a limit and we're trying to go further, do nothing.
+            if clamped_new_scale == current_scale:
+                event.accept()
+                return
+                
+            # Calculate the actual zoom factor to apply to reach the clamped scale
+            actual_zoom_factor = clamped_new_scale / current_scale
+
+            # Get the view coordinates of the anchor point before scaling
+            old_view_anchor = self.mapFromScene(self._zoom_scene_anchor)
+
+            # Scale the view using the clamped factor
+            self.scale(actual_zoom_factor, actual_zoom_factor)
+
+            # Get the view coordinates of the anchor point after scaling
+            new_view_anchor = self.mapFromScene(self._zoom_scene_anchor)
+
+            # Calculate the pan required to move the anchor point back to its original view position
+            pan_delta = new_view_anchor - old_view_anchor
+
+            # Apply the corrective pan
+            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() + pan_delta.x())
+            self.verticalScrollBar().setValue(self.verticalScrollBar().value() + pan_delta.y())
 
             event.accept()
             return
