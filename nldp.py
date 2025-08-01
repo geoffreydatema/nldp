@@ -334,7 +334,7 @@ class NLDPNode(QGraphicsItem):
 class NLDPView(QGraphicsView):
     """
     Custom QGraphicsView for the NLDP editor.
-    Implements custom background drawing, panning, zooming, and wire creation.
+    Implements custom background drawing, panning, zooming, and wire creation/deletion.
     """
     def __init__(self, scene, parent=None):
         super().__init__(scene, parent)
@@ -347,6 +347,7 @@ class NLDPView(QGraphicsView):
         # --- Interaction State ---
         self._is_panning = False
         self._is_zooming = False
+        self._is_cutting = False # For wire deletion
         self._last_pan_point = QPoint()
         self._last_zoom_point = QPoint()
         self._zoom_scene_anchor = QPointF()
@@ -444,8 +445,21 @@ class NLDPView(QGraphicsView):
 
     def mousePressEvent(self, event):
         """
-        Handles mouse press events to initiate panning, zooming, or wire drawing.
+        Handles mouse press events to initiate various interactions.
         """
+        # --- Wire Cutting ---
+        is_cutting = (event.button() == Qt.MouseButton.LeftButton and 
+                      event.modifiers() == Qt.KeyboardModifier.ControlModifier)
+        if is_cutting:
+            self._is_cutting = True
+            self.setCursor(Qt.CursorShape.CrossCursor)
+            # Immediately check for a wire to delete on click
+            item_to_cut = self.itemAt(event.position().toPoint())
+            if isinstance(item_to_cut, NLDPWire):
+                self.scene().removeItem(item_to_cut)
+            event.accept()
+            return
+
         # --- Wire Drawing ---
         item = self.itemAt(event.position().toPoint())
         if isinstance(item, NLDPSocket):
@@ -487,8 +501,16 @@ class NLDPView(QGraphicsView):
 
     def mouseMoveEvent(self, event):
         """
-        Handles mouse move events to perform panning, zooming, or updating the drawing wire.
+        Handles mouse move events for various interactions.
         """
+        # --- Wire Cutting ---
+        if self._is_cutting:
+            item_to_cut = self.itemAt(event.position().toPoint())
+            if isinstance(item_to_cut, NLDPWire):
+                self.scene().removeItem(item_to_cut)
+            event.accept()
+            return
+
         # --- Wire Drawing ---
         if self.drawing_wire:
             start_pos = self.start_socket.scenePos()
@@ -549,6 +571,13 @@ class NLDPView(QGraphicsView):
         """
         Handles mouse release events to stop an interaction.
         """
+        # --- Wire Cutting ---
+        if self._is_cutting and event.button() == Qt.MouseButton.LeftButton:
+            self._is_cutting = False
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+            event.accept()
+            return
+
         # --- Wire Drawing ---
         if self.drawing_wire:
             # Hide the ghost wire to check what's underneath
