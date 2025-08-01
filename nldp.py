@@ -393,17 +393,22 @@ class NLDPView(QGraphicsView):
 
     def contextMenuEvent(self, event):
         """
-        Handles right-click events to show the 'Add Node' menu.
+        Handles right-click events to show the appropriate context menu.
+        - Right-Click: Add Node menu.
+        - Space + Right-Click: Editor Actions menu.
         """
         menu = QMenu(self)
         
-        # --- Menu Styling (Updated with user's preferences) ---
+        # --- Menu Styling ---
         menu_stylesheet = """
             QMenu {
                 background-color: #d98c00;
                 color: white;
                 border: 0;
-                margin: 4px;
+                margin: 2px; /* Creates a small gap for the submenu */
+            }
+            QMenu::pane {
+                border: 0; /* Disables the default frame and shadow */
             }
             QMenu::item {
                 padding: 2px 24px;
@@ -416,38 +421,50 @@ class NLDPView(QGraphicsView):
             }
         """
         menu.setStyleSheet(menu_stylesheet)
-        
-        # --- First Test Category ---
-        test_menu = menu.addMenu("Test")
-        add_node1_action = test_menu.addAction("Simple I/O Node")
-        add_node2_action = test_menu.addAction("Processing Node")
-        add_node3_action = test_menu.addAction("Output Only Node")
 
-        # --- Second Test Category ---
-        more_tests_menu = menu.addMenu("More Tests")
-        add_node4_action = more_tests_menu.addAction("Top/Bottom Node")
-        add_node5_action = more_tests_menu.addAction("Wide Node")
-        
-        # Execute the menu and get the chosen action
-        action = menu.exec(event.globalPos())
-        scene_pos = self.mapToScene(event.pos())
-        
-        # Add a new node if an action was selected
-        if action == add_node1_action:
-            new_node = NLDPNode(title="Simple I/O", x=scene_pos.x(), y=scene_pos.y(), left_sockets=2, right_sockets=1)
-            self.scene().addItem(new_node)
-        elif action == add_node2_action:
-            new_node = NLDPNode(title="Processing", x=scene_pos.x(), y=scene_pos.y(), left_sockets=1, right_sockets=2, color=(20, 90, 20))
-            self.scene().addItem(new_node)
-        elif action == add_node3_action:
-            new_node = NLDPNode(title="Output Only", x=scene_pos.x(), y=scene_pos.y(), right_sockets=1, color=(20, 20, 90))
-            self.scene().addItem(new_node)
-        elif action == add_node4_action:
-            new_node = NLDPNode(title="Top/Bottom", x=scene_pos.x(), y=scene_pos.y(), top_sockets=2, bottom_sockets=2, color=(90, 90, 20))
-            self.scene().addItem(new_node)
-        elif action == add_node5_action:
-            new_node = NLDPNode(title="Wide Node", width_units=12, height_units=4, x=scene_pos.x(), y=scene_pos.y(), left_sockets=1, right_sockets=1, color=(90, 20, 90))
-            self.scene().addItem(new_node)
+        if self._spacebar_pressed:
+            # --- Editor Actions Menu ---
+            file_menu = menu.addMenu("File")
+            new_action = file_menu.addAction("New")
+            exit_action = file_menu.addAction("Exit")
+            
+            action = menu.exec(event.globalPos())
+
+            if action == new_action:
+                self.scene().clear()
+                self._spacebar_pressed = False
+            elif action == exit_action:
+                QApplication.instance().quit()
+
+        else:
+            # --- Add Node Menu ---
+            test_menu = menu.addMenu("Test")
+            add_node1_action = test_menu.addAction("Simple I/O Node")
+            add_node2_action = test_menu.addAction("Processing Node")
+            add_node3_action = test_menu.addAction("Output Only Node")
+
+            more_tests_menu = menu.addMenu("More Tests")
+            add_node4_action = more_tests_menu.addAction("Top/Bottom Node")
+            add_node5_action = more_tests_menu.addAction("Wide Node")
+            
+            action = menu.exec(event.globalPos())
+            scene_pos = self.mapToScene(event.pos())
+            
+            if action == add_node1_action:
+                new_node = NLDPNode(title="Simple I/O", x=scene_pos.x(), y=scene_pos.y(), left_sockets=2, right_sockets=1)
+                self.scene().addItem(new_node)
+            elif action == add_node2_action:
+                new_node = NLDPNode(title="Processing", x=scene_pos.x(), y=scene_pos.y(), left_sockets=1, right_sockets=2, color=(20, 90, 20))
+                self.scene().addItem(new_node)
+            elif action == add_node3_action:
+                new_node = NLDPNode(title="Output Only", x=scene_pos.x(), y=scene_pos.y(), right_sockets=1, color=(20, 20, 90))
+                self.scene().addItem(new_node)
+            elif action == add_node4_action:
+                new_node = NLDPNode(title="Top/Bottom", x=scene_pos.x(), y=scene_pos.y(), top_sockets=2, bottom_sockets=2, color=(90, 90, 20))
+                self.scene().addItem(new_node)
+            elif action == add_node5_action:
+                new_node = NLDPNode(title="Wide Node", width_units=12, height_units=4, x=scene_pos.x(), y=scene_pos.y(), left_sockets=1, right_sockets=1, color=(90, 20, 90))
+                self.scene().addItem(new_node)
 
 
     def is_circular_connection(self, start_socket, end_socket):
