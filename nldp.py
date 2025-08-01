@@ -6,7 +6,8 @@ from PySide6.QtWidgets import (
     QGraphicsScene,
     QGraphicsItem,
     QStyle,
-    QGraphicsPathItem
+    QGraphicsPathItem,
+    QMenu
 )
 from PySide6.QtGui import QColor, QPainter, QPen, QPainterPath
 from PySide6.QtCore import Qt, QRectF, QLineF, QPoint, QPointF
@@ -390,6 +391,65 @@ class NLDPView(QGraphicsView):
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
 
+    def contextMenuEvent(self, event):
+        """
+        Handles right-click events to show the 'Add Node' menu.
+        """
+        menu = QMenu(self)
+        
+        # --- Menu Styling (Updated with user's preferences) ---
+        menu_stylesheet = """
+            QMenu {
+                background-color: #d98c00;
+                color: white;
+                border: 0;
+                margin: 4px;
+            }
+            QMenu::item {
+                padding: 2px 24px;
+            }
+            QMenu::item:selected {
+                background-color: #d99c2b;
+            }
+            QMenu::right-arrow {
+                image: none;
+            }
+        """
+        menu.setStyleSheet(menu_stylesheet)
+        
+        # --- First Test Category ---
+        test_menu = menu.addMenu("Test")
+        add_node1_action = test_menu.addAction("Simple I/O Node")
+        add_node2_action = test_menu.addAction("Processing Node")
+        add_node3_action = test_menu.addAction("Output Only Node")
+
+        # --- Second Test Category ---
+        more_tests_menu = menu.addMenu("More Tests")
+        add_node4_action = more_tests_menu.addAction("Top/Bottom Node")
+        add_node5_action = more_tests_menu.addAction("Wide Node")
+        
+        # Execute the menu and get the chosen action
+        action = menu.exec(event.globalPos())
+        scene_pos = self.mapToScene(event.pos())
+        
+        # Add a new node if an action was selected
+        if action == add_node1_action:
+            new_node = NLDPNode(title="Simple I/O", x=scene_pos.x(), y=scene_pos.y(), left_sockets=2, right_sockets=1)
+            self.scene().addItem(new_node)
+        elif action == add_node2_action:
+            new_node = NLDPNode(title="Processing", x=scene_pos.x(), y=scene_pos.y(), left_sockets=1, right_sockets=2, color=(20, 90, 20))
+            self.scene().addItem(new_node)
+        elif action == add_node3_action:
+            new_node = NLDPNode(title="Output Only", x=scene_pos.x(), y=scene_pos.y(), right_sockets=1, color=(20, 20, 90))
+            self.scene().addItem(new_node)
+        elif action == add_node4_action:
+            new_node = NLDPNode(title="Top/Bottom", x=scene_pos.x(), y=scene_pos.y(), top_sockets=2, bottom_sockets=2, color=(90, 90, 20))
+            self.scene().addItem(new_node)
+        elif action == add_node5_action:
+            new_node = NLDPNode(title="Wide Node", width_units=12, height_units=4, x=scene_pos.x(), y=scene_pos.y(), left_sockets=1, right_sockets=1, color=(90, 20, 90))
+            self.scene().addItem(new_node)
+
+
     def is_circular_connection(self, start_socket, end_socket):
         """
         Checks if creating a wire between two sockets would create a cycle.
@@ -563,13 +623,15 @@ class NLDPView(QGraphicsView):
                 event.accept()
                 return
         
-        # --- Rubber Band Selection ---
-        # If no other action is taken, a left-click drag will start a rubber band selection.
-        # Change the cursor to indicate this.
         if event.button() == Qt.MouseButton.LeftButton:
+            # --- Rubber Band Selection ---
+            # If no other action is taken, a left-click drag will start a rubber band selection.
+            # Change the cursor to indicate this.
             self.setCursor(Qt.CursorShape.CrossCursor)
-
-        super().mousePressEvent(event)
+            super().mousePressEvent(event)
+        
+        # Right-clicks are handled by contextMenuEvent, so we don't call super() for them here.
+        # This prevents the default right-click drag/select behavior.
 
     def mouseMoveEvent(self, event):
         """
