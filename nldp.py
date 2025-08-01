@@ -136,11 +136,27 @@ class NLDPNode(QGraphicsItem):
                  socket_radius=5.0, socket_color=None):
         """
         Initializes the node.
+
+        Args:
+            title (str): The name to be displayed in the node's title bar.
+            width_units (int): The width of the node in grid units.
+            height_units (int): The height of the node in grid units.
+            show_border (bool): Whether to display the static design border.
+            color (tuple | list): An (R, G, B) tuple or list for the node's body color.
+            x (int | float): The initial x-position of the node in the scene.
+            y (int | float): The initial y-position of the node in the scene.
+            left_sockets (int): Number of sockets on the left.
+            right_sockets (int): Number of sockets on the right.
+            top_sockets (int): Number of sockets on the top.
+            bottom_sockets (int): Number of sockets on the bottom.
+            socket_radius (float): The radius for all sockets on this node.
+            socket_color (tuple | list): The color for all sockets on this node.
         """
         super().__init__()
 
         # --- Configuration ---
         self.grid_size = 16
+        # Enforce minimum size to prevent drawing errors
         width_units = max(1, width_units)
         height_units = max(2, height_units)
         self.width = width_units * self.grid_size
@@ -150,7 +166,7 @@ class NLDPNode(QGraphicsItem):
         
         # --- Visual Properties ---
         self.corner_radius = 8.0
-        self.title_bar_height = 1 * self.grid_size
+        self.title_bar_height = 1 * self.grid_size # 1 grid unit
         
         # --- Color Management ---
         if isinstance(color, (tuple, list)) and len(color) == 3:
@@ -189,6 +205,7 @@ class NLDPNode(QGraphicsItem):
         """
         Creates and positions the sockets on the node.
         """
+        # --- Vertical Sockets (Left/Right) ---
         available_v_slots = (self.height / self.grid_size) - 1
         num_left = min(int(available_v_slots), num_left)
         num_right = min(int(available_v_slots), num_right)
@@ -207,10 +224,12 @@ class NLDPNode(QGraphicsItem):
             socket.setPos(self.width, y_pos)
             self.right_sockets.append(socket)
             
+        # --- Horizontal Sockets (Top/Bottom) ---
         available_h_slots = self.width / self.grid_size
         num_top = min(int(available_h_slots), num_top)
         num_bottom = min(int(available_h_slots), num_bottom)
 
+        # Calculate starting x-position from the right edge
         x_start_right = self.width - (self.grid_size / 2)
 
         for i in range(num_top):
@@ -292,10 +311,14 @@ class NLDPNode(QGraphicsItem):
                              view._spacebar_pressed)
 
             if is_title_bar_click or is_space_drag:
+                # If this is a move operation, clear the scene's selection
+                # and select only this node.
+                if self.scene():
+                    self.scene().clearSelection()
+                self.setSelected(True)
+
                 self._is_dragging = True
                 self._drag_offset = self.pos() - event.scenePos()
-                if not self.isSelected():
-                    self.setSelected(True)
                 event.accept()
                 return
         
@@ -409,10 +432,41 @@ class NLDPView(QGraphicsView):
 
     def keyPressEvent(self, event):
         """
-        Tracks when the spacebar is pressed.
+        Tracks when the spacebar is pressed or when items are deleted.
         """
         if event.key() == Qt.Key.Key_Space:
             self._spacebar_pressed = True
+        elif event.key() == Qt.Key.Key_Delete:
+            selected_items = self.scene().selectedItems()
+            if not selected_items:
+                super().keyPressEvent(event)
+                return
+
+            # Use a set to avoid trying to remove the same wire multiple times
+            wires_to_remove = set()
+            nodes_to_remove = []
+
+            for item in selected_items:
+                if isinstance(item, NLDPNode):
+                    nodes_to_remove.append(item)
+                    # Find all wires connected to this node's sockets
+                    for socket in item.get_all_sockets():
+                        for connected_socket in socket.connections:
+                            # Find the wire that connects these two sockets
+                            for scene_item in self.scene().items():
+                                if isinstance(scene_item, NLDPWire):
+                                    if (scene_item.start_socket == socket and scene_item.end_socket == connected_socket) or \
+                                       (scene_item.start_socket == connected_socket and scene_item.end_socket == socket):
+                                        wires_to_remove.add(scene_item)
+                elif isinstance(item, NLDPWire):
+                    wires_to_remove.add(item)
+
+            # Remove all identified items from the scene
+            for wire in wires_to_remove:
+                self.scene().removeItem(wire)
+            for node in nodes_to_remove:
+                self.scene().removeItem(node)
+
         super().keyPressEvent(event)
 
     def keyReleaseEvent(self, event):
@@ -469,6 +523,7 @@ class NLDPView(QGraphicsView):
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             self.drawing_wire.setPen(pen)
             self.scene().addItem(self.drawing_wire)
+            self.setCursor(Qt.CursorShape.CrossCursor)
             event.accept()
             return
             
@@ -496,6 +551,23 @@ class NLDPView(QGraphicsView):
             self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
             event.accept()
             return
+
+        # --- Multi-Select ---
+        is_shift_select = (event.button() == Qt.MouseButton.LeftButton and
+                           event.modifiers() == Qt.KeyboardModifier.ShiftModifier)
+        if is_shift_select:
+            item_to_select = self.itemAt(event.position().toPoint())
+            if isinstance(item_to_select, NLDPNode):
+                # Toggle the selection state of the item without clearing others
+                item_to_select.setSelected(not item_to_select.isSelected())
+                event.accept()
+                return
+        
+        # --- Rubber Band Selection ---
+        # If no other action is taken, a left-click drag will start a rubber band selection.
+        # Change the cursor to indicate this.
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.setCursor(Qt.CursorShape.CrossCursor)
 
         super().mousePressEvent(event)
 
@@ -614,6 +686,7 @@ class NLDPView(QGraphicsView):
             self.scene().removeItem(self.drawing_wire)
             self.drawing_wire = None
             self.start_socket = None
+            self.setCursor(Qt.CursorShape.ArrowCursor)
             event.accept()
             return
 
@@ -632,6 +705,9 @@ class NLDPView(QGraphicsView):
             self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
             event.accept()
             return
+        
+        # Reset cursor after a rubber band selection
+        self.setCursor(Qt.CursorShape.ArrowCursor)
 
         super().mouseReleaseEvent(event)
 
