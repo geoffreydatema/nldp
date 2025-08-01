@@ -382,7 +382,7 @@ class NLDPView(QGraphicsView):
 
         # --- Keyboard State ---
         self._spacebar_pressed = False
-
+        
         # --- Zoom Limits ---
         self.MIN_ZOOM = 0.2
         self.MAX_ZOOM = 5.0
@@ -396,6 +396,7 @@ class NLDPView(QGraphicsView):
         Handles right-click events to show the appropriate context menu.
         - Right-Click: Add Node menu.
         - Space + Right-Click: Editor Actions menu.
+        - Shift + Right-Click: Contextual Actions menu.
         """
         menu = QMenu(self)
         
@@ -405,7 +406,7 @@ class NLDPView(QGraphicsView):
                 background-color: #d98c00;
                 color: white;
                 border: 0;
-                margin: 2px; /* Creates a small gap for the submenu */
+                margin: 4px; /* Creates a small gap for the submenu */
             }
             QMenu::pane {
                 border: 0; /* Disables the default frame and shadow */
@@ -421,7 +422,7 @@ class NLDPView(QGraphicsView):
             }
         """
         menu.setStyleSheet(menu_stylesheet)
-
+        
         if self._spacebar_pressed:
             # --- Editor Actions Menu ---
             file_menu = menu.addMenu("File")
@@ -430,11 +431,31 @@ class NLDPView(QGraphicsView):
             
             action = menu.exec(event.globalPos())
 
+            # Reset the spacebar state immediately after the menu closes to prevent it getting stuck.
+            self._spacebar_pressed = False
+
             if action == new_action:
                 self.scene().clear()
-                self._spacebar_pressed = False
             elif action == exit_action:
                 QApplication.instance().quit()
+
+        elif event.modifiers() == Qt.KeyboardModifier.ShiftModifier:
+            # --- Contextual Actions Menu ---
+            item_under_cursor = self.itemAt(event.pos())
+            node_under_cursor = None
+            if isinstance(item_under_cursor, NLDPNode):
+                node_under_cursor = item_under_cursor
+            elif isinstance(item_under_cursor, NLDPSocket):
+                node_under_cursor = item_under_cursor.parentItem()
+
+            if node_under_cursor:
+                delete_action = menu.addAction("Delete Node(s)")
+                action = menu.exec(event.globalPos())
+                if action == delete_action:
+                    self._delete_selected_items()
+            else:
+                placeholder_action = menu.addAction("Placeholder Action")
+                menu.exec(event.globalPos())
 
         else:
             # --- Add Node Menu ---
@@ -507,6 +528,38 @@ class NLDPView(QGraphicsView):
         
         return False
 
+    def _delete_selected_items(self):
+        """
+        Deletes all currently selected nodes and wires from the scene.
+        """
+        selected_items = self.scene().selectedItems()
+        if not selected_items:
+            return
+
+        wires_to_remove = set()
+        nodes_to_remove = []
+
+        for item in selected_items:
+            if isinstance(item, NLDPNode):
+                nodes_to_remove.append(item)
+                # Find all wires connected to this node's sockets
+                for socket in item.get_all_sockets():
+                    for connected_socket in socket.connections:
+                        # Find the wire that connects these two sockets
+                        for scene_item in self.scene().items():
+                            if isinstance(scene_item, NLDPWire):
+                                if (scene_item.start_socket == socket and scene_item.end_socket == connected_socket) or \
+                                   (scene_item.start_socket == connected_socket and scene_item.end_socket == socket):
+                                    wires_to_remove.add(scene_item)
+            elif isinstance(item, NLDPWire):
+                wires_to_remove.add(item)
+
+        # Remove all identified items from the scene
+        for wire in wires_to_remove:
+            self.scene().removeItem(wire)
+        for node in nodes_to_remove:
+            self.scene().removeItem(node)
+
     def keyPressEvent(self, event):
         """
         Tracks when the spacebar is pressed or when items are deleted.
@@ -514,36 +567,8 @@ class NLDPView(QGraphicsView):
         if event.key() == Qt.Key.Key_Space:
             self._spacebar_pressed = True
         elif event.key() == Qt.Key.Key_Delete:
-            selected_items = self.scene().selectedItems()
-            if not selected_items:
-                super().keyPressEvent(event)
-                return
-
-            # Use a set to avoid trying to remove the same wire multiple times
-            wires_to_remove = set()
-            nodes_to_remove = []
-
-            for item in selected_items:
-                if isinstance(item, NLDPNode):
-                    nodes_to_remove.append(item)
-                    # Find all wires connected to this node's sockets
-                    for socket in item.get_all_sockets():
-                        for connected_socket in socket.connections:
-                            # Find the wire that connects these two sockets
-                            for scene_item in self.scene().items():
-                                if isinstance(scene_item, NLDPWire):
-                                    if (scene_item.start_socket == socket and scene_item.end_socket == connected_socket) or \
-                                       (scene_item.start_socket == connected_socket and scene_item.end_socket == socket):
-                                        wires_to_remove.add(scene_item)
-                elif isinstance(item, NLDPWire):
-                    wires_to_remove.add(item)
-
-            # Remove all identified items from the scene
-            for wire in wires_to_remove:
-                self.scene().removeItem(wire)
-            for node in nodes_to_remove:
-                self.scene().removeItem(node)
-
+            self._delete_selected_items()
+        
         super().keyPressEvent(event)
 
     def keyReleaseEvent(self, event):
