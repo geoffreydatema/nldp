@@ -366,6 +366,46 @@ class NLDPView(QGraphicsView):
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
 
+    def is_circular_connection(self, start_socket, end_socket):
+        """
+        Checks if creating a wire between two sockets would create a cycle.
+
+        Args:
+            start_socket (NLDPSocket): The proposed starting socket.
+            end_socket (NLDPSocket): The proposed ending socket.
+
+        Returns:
+            bool: True if a cycle would be created, False otherwise.
+        """
+        # Determine the start and end nodes for the traversal
+        output_socket = start_socket if start_socket.socket_type == SOCKET_TYPE_OUTPUT else end_socket
+        input_socket = end_socket if end_socket.socket_type == SOCKET_TYPE_INPUT else start_socket
+        
+        start_node = output_socket.parentItem()
+        end_node = input_socket.parentItem()
+
+        # Use a breadth-first search to traverse downstream from the end_node
+        nodes_to_visit = [end_node]
+        visited_nodes = {end_node}
+
+        while nodes_to_visit:
+            current_node = nodes_to_visit.pop(0)
+            
+            # If we reach the start_node, we have found a cycle
+            if current_node == start_node:
+                return True
+
+            # Get all output sockets from the current node
+            output_sockets = current_node.right_sockets + current_node.bottom_sockets
+            for socket in output_sockets:
+                for connection in socket.connections:
+                    next_node = connection.parentItem()
+                    if next_node not in visited_nodes:
+                        visited_nodes.add(next_node)
+                        nodes_to_visit.append(next_node)
+        
+        return False
+
     def keyPressEvent(self, event):
         """
         Tracks when the spacebar is pressed.
@@ -407,7 +447,6 @@ class NLDPView(QGraphicsView):
         Handles mouse press events to initiate panning, zooming, or wire drawing.
         """
         # --- Wire Drawing ---
-        # Use event.position().toPoint() instead of deprecated event.pos()
         item = self.itemAt(event.position().toPoint())
         if isinstance(item, NLDPSocket):
             self.start_socket = item
@@ -516,7 +555,28 @@ class NLDPView(QGraphicsView):
             self.drawing_wire.hide()
             end_item = self.itemAt(event.position().toPoint())
             
-            if isinstance(end_item, NLDPSocket) and self.start_socket != end_item:
+            # Check for a valid connection
+            is_valid_target = isinstance(end_item, NLDPSocket) and self.start_socket != end_item
+            is_valid_type = is_valid_target and self.start_socket.socket_type != end_item.socket_type
+            is_not_circular = is_valid_type and not self.is_circular_connection(self.start_socket, end_item)
+
+            if is_valid_target and is_valid_type and is_not_circular:
+                
+                # Determine which socket is the input
+                input_socket = end_item if end_item.socket_type == SOCKET_TYPE_INPUT else self.start_socket
+                
+                # --- Enforce single connection for INPUT sockets ---
+                if input_socket.connections:
+                    # Get the old socket it was connected to
+                    old_partner_socket = input_socket.connections[0]
+                    # Find and remove the old wire from the scene
+                    for item in self.scene().items():
+                        if isinstance(item, NLDPWire) and \
+                           ((item.start_socket == input_socket and item.end_socket == old_partner_socket) or \
+                            (item.start_socket == old_partner_socket and item.end_socket == input_socket)):
+                            self.scene().removeItem(item)
+                            break # Found and removed the old wire
+                
                 # --- Create a permanent wire ---
                 wire = NLDPWire(self.start_socket, end_item)
                 self.scene().addItem(wire)
@@ -617,7 +677,7 @@ class NLDPWindow(QMainWindow):
 
         # --- Add a test node ---
         node = NLDPNode(
-            title="input1",
+            title="ALPHA",
             width_units=8,
             height_units=4,
             left_sockets=2,
@@ -626,7 +686,7 @@ class NLDPWindow(QMainWindow):
         self.scene.addItem(node)
 
         node2 = NLDPNode(
-            title="big boi",
+            title="BETA",
             x=16*16,
             width_units=7,
             height_units=13,
@@ -636,12 +696,14 @@ class NLDPWindow(QMainWindow):
         self.scene.addItem(node2)
 
         node3 = NLDPNode(
-            title="input2",
+            title="GAMMA",
             y=8*16,
             width_units=8,
             height_units=4,
             left_sockets=1,
-            right_sockets=1
+            right_sockets=1,
+            top_sockets=2,
+            bottom_sockets=1
         )
         self.scene.addItem(node3)
 
