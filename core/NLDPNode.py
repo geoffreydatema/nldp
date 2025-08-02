@@ -8,18 +8,9 @@ class NLDPNode(QGraphicsItem):
     Represents a single node in the NLDP graph.
     Builds its visual layout and sockets from a structured 'layout' list.
     """
-
     def __init__(self, title="New Node", layout=None, show_border=False, color=None, x=0, y=0):
         """
         Initializes the node.
-
-        Args:
-            title (str): The name to be displayed in the node's title bar.
-            layout (list[dict]): A list of dictionaries defining the node's rows.
-            show_border (bool): Whether to display the static design border.
-            color (tuple | list): An (R, G, B) tuple or list for the node's body color.
-            x (int | float): The initial x-position of the node in the scene.
-            y (int | float): The initial y-position of the node in the scene.
         """
         super().__init__()
 
@@ -83,10 +74,8 @@ class NLDPNode(QGraphicsItem):
                 socket.setPos(0, y_pos)
                 self.sockets[i] = socket
                 
-                # Store the initial value for this input
                 self.input_values[i] = {'label': label, 'value': row_data.get('default_value')}
 
-                # If a default value is provided, create an editable field
                 if 'default_value' in row_data:
                     self._create_proxy_widget(i, row_data, y_pos, self._update_input_value)
 
@@ -95,7 +84,6 @@ class NLDPNode(QGraphicsItem):
                 socket.set_properties(constants.SOCKET_TYPE_OUTPUT, label, QColor(255, 165, 0))
                 socket.setPos(self.width, y_pos)
                 self.sockets[i] = socket
-                # Initialize the output value
                 self.output_values[i] = {'label': label, 'value': None}
             
             elif row_type == constants.ROW_TYPE_STATIC_FIELD:
@@ -221,11 +209,11 @@ class NLDPNode(QGraphicsItem):
             is_title_bar_click = title_bar_rect.contains(event.pos())
 
             view = self.scene().views()[0] if self.scene() and self.scene().views() else None
-            is_space_drag = (view is not None and
-                             hasattr(view, '_spacebar_pressed') and
-                             view._spacebar_pressed)
+            is_alt_move = (view is not None and
+                             hasattr(view, '_backtick_pressed') and
+                             view._backtick_pressed)
 
-            if is_title_bar_click or is_space_drag:
+            if is_title_bar_click or is_alt_move:
                 if self.scene():
                     self.scene().clearSelection()
                 self.setSelected(True)

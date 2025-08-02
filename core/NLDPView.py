@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import QApplication, QGraphicsView, QGraphicsPathItem, QMenu
-from PySide6.QtGui import QColor, QPainter, QPen, QPainterPath
-from PySide6.QtCore import Qt, QRectF, QLineF, QPoint, QPointF
+from PySide6.QtGui import QColor, QPainter, QPen, QPainterPath, QCursor
+from PySide6.QtCore import Qt, QRectF, QLineF, QPoint, QPointF, QEvent
 from . import constants, NLDPNode, NLDPWire, NLDPSocket
 
 class NLDPView(QGraphicsView):
@@ -20,6 +20,7 @@ class NLDPView(QGraphicsView):
         self._is_panning = False
         self._is_zooming = False
         self._is_cutting = False # For wire deletion
+        self._ignore_next_context_menu = False
         self._last_pan_point = QPoint()
         self._last_zoom_point = QPoint()
         self._zoom_scene_anchor = QPointF()
@@ -29,8 +30,11 @@ class NLDPView(QGraphicsView):
         self.start_socket = None
 
         # --- Keyboard State ---
-        self._spacebar_pressed = False
+        self._backtick_pressed = False # For alternate node moving
         
+        # --- Menu State ---
+        self._editor_menu = None
+
         # --- Zoom Limits ---
         self.MIN_ZOOM = 0.2
         self.MAX_ZOOM = 5.0
@@ -39,10 +43,55 @@ class NLDPView(QGraphicsView):
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
 
+    def _on_editor_menu_closed(self):
+        """
+        Ensures the menu state is cleaned up whenever the menu is closed.
+        This is connected to the menu's aboutToHide signal.
+        """
+        if self._editor_menu:
+            self._install_menu_event_filter(self._editor_menu, remove=True)
+            self._editor_menu = None
+
+    def _install_menu_event_filter(self, menu, remove=False):
+        """
+        Recursively installs or removes the event filter on a menu and all its submenus.
+        """
+        if remove:
+            menu.removeEventFilter(self)
+        else:
+            menu.installEventFilter(self)
+        
+        for action in menu.actions():
+            if action.menu():
+                self._install_menu_event_filter(action.menu(), remove=remove)
+
+    def eventFilter(self, watched, event):
+        """
+        Filters events for the editor menu to catch the spacebar release.
+        """
+        if isinstance(watched, QMenu) and event.type() == QEvent.Type.KeyRelease and \
+           event.key() == Qt.Key.Key_Space and not event.isAutoRepeat():
+            
+            if self._editor_menu:
+                action = self._editor_menu.activeAction()
+                self._editor_menu.close()
+                
+                if action and not action.menu(): # Only trigger if it's not a submenu
+                    action.trigger()
+
+            return True # Event was handled
+        return super().eventFilter(watched, event)
+
     def contextMenuEvent(self, event):
         """
         Handles right-click events to show the appropriate context menu.
         """
+        # If a zoom drag was just completed, ignore this context menu event.
+        if self._ignore_next_context_menu:
+            self._ignore_next_context_menu = False
+            event.accept()
+            return
+
         menu = QMenu(self)
         
         # --- Menu Styling ---
@@ -68,22 +117,7 @@ class NLDPView(QGraphicsView):
         """
         menu.setStyleSheet(menu_stylesheet)
         
-        if self._spacebar_pressed:
-            # --- Editor Actions Menu ---
-            file_menu = menu.addMenu("File")
-            new_action = file_menu.addAction("New")
-            exit_action = file_menu.addAction("Exit")
-            
-            action = menu.exec(event.globalPos())
-
-            self._spacebar_pressed = False
-
-            if action == new_action:
-                self.scene().clear()
-            elif action == exit_action:
-                QApplication.instance().quit()
-
-        elif event.modifiers() == Qt.KeyboardModifier.ShiftModifier:
+        if event.modifiers() == Qt.KeyboardModifier.ShiftModifier:
             # --- Contextual Actions Menu ---
             item_under_cursor = self.itemAt(event.pos())
             node_under_cursor = None
@@ -93,6 +127,10 @@ class NLDPView(QGraphicsView):
                 node_under_cursor = item_under_cursor.parentItem()
 
             if node_under_cursor:
+                # Clear existing selection and select only the clicked node
+                self.scene().clearSelection()
+                node_under_cursor.setSelected(True)
+
                 delete_action = menu.addAction("Delete Node(s)")
                 action = menu.exec(event.globalPos())
                 if action == delete_action:
@@ -191,21 +229,61 @@ class NLDPView(QGraphicsView):
 
     def keyPressEvent(self, event):
         """
-        Tracks when the spacebar is pressed or when items are deleted.
+        Tracks key presses for various editor actions.
         """
-        if event.key() == Qt.Key.Key_Space:
-            self._spacebar_pressed = True
+        if event.key() == Qt.Key.Key_QuoteLeft: # Backtick key
+            self._backtick_pressed = True
         elif event.key() == Qt.Key.Key_Delete:
             self._delete_selected_items()
+        elif event.key() == Qt.Key.Key_Space and not event.isAutoRepeat() and self._editor_menu is None:
+            # --- Show Editor Menu ---
+            self._editor_menu = QMenu(self)
+            menu_stylesheet = """
+                QMenu {
+                    background-color: #d98c00;
+                    color: white;
+                    border: 0;
+                    margin: 2px;
+                }
+                QMenu::pane {
+                    border: 0;
+                }
+                QMenu::item {
+                    padding: 2px 24px;
+                }
+                QMenu::item:selected {
+                    background-color: #d99c2b;
+                }
+                QMenu::right-arrow {
+                    image: none;
+                }
+            """
+            self._editor_menu.setStyleSheet(menu_stylesheet)
+            self._editor_menu.aboutToHide.connect(self._on_editor_menu_closed)
+            
+            file_menu = self._editor_menu.addMenu("File")
+            new_action = file_menu.addAction("New")
+            exit_action = file_menu.addAction("Exit")
+            
+            new_action.triggered.connect(self.scene().clear)
+            exit_action.triggered.connect(QApplication.instance().quit)
+            
+            self._install_menu_event_filter(self._editor_menu) # Recursively install filter
+            self._editor_menu.popup(QCursor.pos())
         
         super().keyPressEvent(event)
 
     def keyReleaseEvent(self, event):
         """
-        Tracks when the spacebar is released.
+        Tracks key releases for various editor actions.
         """
-        if event.key() == Qt.Key.Key_Space and not event.isAutoRepeat():
-            self._spacebar_pressed = False
+        if event.key() == Qt.Key.Key_QuoteLeft and not event.isAutoRepeat(): # Backtick key
+            self._backtick_pressed = False
+        elif event.key() == Qt.Key.Key_Space and not event.isAutoRepeat():
+            if self._editor_menu:
+                # The event filter will handle the action, but we still need to close the menu
+                self._editor_menu.close()
+        
         super().keyReleaseEvent(event)
 
     def wheelEvent(self, event):
@@ -274,6 +352,7 @@ class NLDPView(QGraphicsView):
 
         if is_zoom_alt_right:
             self._is_zooming = True
+            self._ignore_next_context_menu = True # Set the flag to prevent menu on release
             self._last_zoom_point = event.position().toPoint()
             self._zoom_scene_anchor = self.mapToScene(event.position().toPoint())
             self.setCursor(Qt.CursorShape.SizeHorCursor)
