@@ -7,42 +7,56 @@ from PySide6.QtWidgets import (
     QGraphicsItem,
     QStyle,
     QGraphicsPathItem,
-    QMenu
+    QMenu,
+    QLineEdit,
+    QGraphicsProxyWidget
 )
 from PySide6.QtGui import QColor, QPainter, QPen, QPainterPath
 from PySide6.QtCore import Qt, QRectF, QLineF, QPoint, QPointF
 
 SOCKET_TYPE_INPUT = 0
 SOCKET_TYPE_OUTPUT = 1
+ROW_TYPE_INPUT = 2
+ROW_TYPE_OUTPUT = 3
+ROW_TYPE_STATIC_FIELD = 4
 
 class NLDPSocket(QGraphicsItem):
     """
     Represents a connection point (socket) on an NLDPNode.
-    It is a child item of a node, so its position is relative to the node.
+    Its properties are now set by its parent node during layout creation.
     """
-    def __init__(self, parent, socket_type, radius=5.0, color=None):
+    def __init__(self, parent, radius=5.0):
         """
         Initializes the socket.
 
         Args:
             parent (QGraphicsItem): The parent NLDPNode of this socket.
-            socket_type (str): The logical type of the socket (e.g., "INPUT", "OUTPUT").
             radius (float): The radius of the socket circle.
-            color (tuple | list): An (R, G, B) tuple or list for the socket color.
         """
         super().__init__(parent)
 
-        # --- Logical Properties ---
-        self.socket_type = socket_type
+        # --- Logical Properties (set by the parent node) ---
+        self.socket_type = None
         self.connections = []
+        self.label = ""
 
         # --- Visual Properties ---
         self.radius = radius
-        if isinstance(color, (tuple, list)) and len(color) == 3:
-            self.color_fill = QColor(*color)
-        else:
-            # Default to orange if no valid color is provided
-            self.color_fill = QColor(255, 165, 0)
+        self.color_fill = QColor(255, 165, 0) # Default orange
+
+    def set_properties(self, socket_type, label, color):
+        """
+        Sets the logical and visual properties of the socket.
+
+        Args:
+            socket_type (str): The logical type (e.g., SOCKET_TYPE_INPUT).
+            label (str): The text label to be displayed next to the socket.
+            color (QColor): The fill color of the socket.
+        """
+        self.socket_type = socket_type
+        self.label = label
+        if color:
+            self.color_fill = color
 
     def boundingRect(self):
         """
@@ -56,10 +70,8 @@ class NLDPSocket(QGraphicsItem):
         Draws the socket circle.
         """
         painter.setBrush(self.color_fill)
-        # Sockets will have no border for a cleaner look
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(QPointF(0, 0), self.radius, self.radius)
-
 
 class NLDPWire(QGraphicsPathItem):
     """
@@ -129,45 +141,34 @@ class NLDPWire(QGraphicsPathItem):
 class NLDPNode(QGraphicsItem):
     """
     Represents a single node in the NLDP graph.
-    Handles drawing, interaction, and management of its sockets.
+    Builds its visual layout and sockets from a structured 'layout' list.
     """
-    def __init__(self, title="New Node", width_units=8, height_units=12,
-                 show_border=False, color=None, x=0, y=0,
-                 left_sockets=0, right_sockets=0, top_sockets=0, bottom_sockets=0,
-                 socket_radius=5.0, socket_color=None):
+    def __init__(self, title="New Node", layout=None, show_border=False, color=None, x=0, y=0):
         """
         Initializes the node.
 
         Args:
             title (str): The name to be displayed in the node's title bar.
-            width_units (int): The width of the node in grid units.
-            height_units (int): The height of the node in grid units.
+            layout (list[dict]): A list of dictionaries defining the node's rows.
             show_border (bool): Whether to display the static design border.
             color (tuple | list): An (R, G, B) tuple or list for the node's body color.
             x (int | float): The initial x-position of the node in the scene.
             y (int | float): The initial y-position of the node in the scene.
-            left_sockets (int): Number of sockets on the left.
-            right_sockets (int): Number of sockets on the right.
-            top_sockets (int): Number of sockets on the top.
-            bottom_sockets (int): Number of sockets on the bottom.
-            socket_radius (float): The radius for all sockets on this node.
-            socket_color (tuple | list): The color for all sockets on this node.
         """
         super().__init__()
 
         # --- Configuration ---
         self.grid_size = 16
-        # Enforce minimum size to prevent drawing errors
-        width_units = max(1, width_units)
-        height_units = max(2, height_units)
-        self.width = width_units * self.grid_size
-        self.height = height_units * self.grid_size
+        self.layout = layout if layout is not None else []
+        self.width = 8 * self.grid_size # Default width, can be overridden later
+        # Height is determined by the title bar + number of rows in the layout
+        self.height = (len(self.layout) + 1) * self.grid_size
         self.title = title
         self.show_border = show_border
         
         # --- Visual Properties ---
         self.corner_radius = 8.0
-        self.title_bar_height = 1 * self.grid_size # 1 grid unit
+        self.title_bar_height = 1 * self.grid_size
         
         # --- Color Management ---
         if isinstance(color, (tuple, list)) and len(color) == 3:
@@ -176,6 +177,7 @@ class NLDPNode(QGraphicsItem):
             self.color_body = QColor(50, 50, 50)
         self.color_title_bar = self.color_body.lighter(130)
         self.color_title_text = QColor(220, 220, 220)
+        self.color_label_text = QColor(200, 200, 200)
         
         # --- Border Pens ---
         border_thickness = 1.5
@@ -184,14 +186,12 @@ class NLDPNode(QGraphicsItem):
         self.color_border_selected = QColor(240, 240, 240)
         self.pen_border_selected = QPen(self.color_border_selected, border_thickness)
 
-        # --- Sockets ---
-        self.socket_radius = socket_radius
-        self.socket_color = socket_color
-        self.left_sockets = []
-        self.right_sockets = []
-        self.top_sockets = []
-        self.bottom_sockets = []
-        self._create_sockets(left_sockets, right_sockets, top_sockets, bottom_sockets)
+        # --- Data and UI Components ---
+        self.sockets = {}
+        self.static_fields = {}
+        self.input_values = {}
+        self.output_values = {}
+        self._build_from_layout()
 
         # --- Interaction State ---
         self._is_dragging = False
@@ -202,69 +202,95 @@ class NLDPNode(QGraphicsItem):
         self.setAcceptHoverEvents(True)
         self.setPos(x, y)
 
-    def _create_sockets(self, num_left, num_right, num_top, num_bottom):
+    def _build_from_layout(self):
         """
-        Creates and positions the sockets on the node.
+        Creates sockets and UI fields based on the layout definition.
         """
-        # --- Vertical Sockets (Left/Right) ---
-        available_v_slots = (self.height / self.grid_size) - 1
-        num_left = min(int(available_v_slots), num_left)
-        num_right = min(int(available_v_slots), num_right)
+        for i, row_data in enumerate(self.layout):
+            row_type = row_data.get('type')
+            label = row_data.get('label', '')
+            y_pos = self.title_bar_height + (i * self.grid_size) + (self.grid_size / 2)
 
-        y_start = self.title_bar_height + self.grid_size / 2
+            if row_type == ROW_TYPE_INPUT:
+                socket = NLDPSocket(parent=self)
+                socket.set_properties(SOCKET_TYPE_INPUT, label, QColor(255, 165, 0))
+                socket.setPos(0, y_pos)
+                self.sockets[i] = socket
+                
+                # Store the initial value for this input
+                self.input_values[i] = {'label': label, 'value': row_data.get('default_value')}
+
+                # If a default value is provided, create an editable field
+                if 'default_value' in row_data:
+                    self._create_proxy_widget(i, row_data, y_pos, self._update_input_value)
+
+            elif row_type == ROW_TYPE_OUTPUT:
+                socket = NLDPSocket(parent=self)
+                socket.set_properties(SOCKET_TYPE_OUTPUT, label, QColor(255, 165, 0))
+                socket.setPos(self.width, y_pos)
+                self.sockets[i] = socket
+                # Initialize the output value
+                self.output_values[i] = {'label': label, 'value': None}
+            
+            elif row_type == ROW_TYPE_STATIC_FIELD:
+                self.static_fields[i] = {'label': label, 'value': row_data.get('default_value', '')}
+                self._create_proxy_widget(i, row_data, y_pos, self._update_static_field_value)
+
+    def _create_proxy_widget(self, index, row_data, y_pos, update_callback):
+        """
+        Creates and positions a QLineEdit proxy widget for a given row.
+        """
+        line_edit = QLineEdit(str(row_data.get('default_value', '')))
+        line_edit.setStyleSheet("QLineEdit { background-color: #444; color: #eee; border: 1px solid #555; }")
         
-        for i in range(num_left):
-            socket = NLDPSocket(parent=self, socket_type=SOCKET_TYPE_INPUT, radius=self.socket_radius, color=self.socket_color)
-            y_pos = y_start + (i * self.grid_size)
-            socket.setPos(0, y_pos)
-            self.left_sockets.append(socket)
+        proxy_widget = QGraphicsProxyWidget(self)
+        proxy_widget.setWidget(line_edit)
+        
+        field_width = self.width / 2 - 12
+        proxy_widget.setGeometry(QRectF(self.width - field_width - 8, y_pos - 10, field_width, 20))
 
-        for i in range(num_right):
-            socket = NLDPSocket(parent=self, socket_type=SOCKET_TYPE_OUTPUT, radius=self.socket_radius, color=self.socket_color)
-            y_pos = y_start + (i * self.grid_size)
-            socket.setPos(self.width, y_pos)
-            self.right_sockets.append(socket)
-            
-        # --- Horizontal Sockets (Top/Bottom) ---
-        available_h_slots = self.width / self.grid_size
-        num_top = min(int(available_h_slots), num_top)
-        num_bottom = min(int(available_h_slots), num_bottom)
+        line_edit.textChanged.connect(lambda text, i=index: update_callback(i, text))
 
-        # Calculate starting x-position from the right edge
-        x_start_right = self.width - (self.grid_size / 2)
-
-        for i in range(num_top):
-            socket = NLDPSocket(parent=self, socket_type=SOCKET_TYPE_INPUT, radius=self.socket_radius, color=self.socket_color)
-            x_pos = x_start_right - (i * self.grid_size)
-            socket.setPos(x_pos, 0)
-            self.top_sockets.append(socket)
-            
-        for i in range(num_bottom):
-            socket = NLDPSocket(parent=self, socket_type=SOCKET_TYPE_OUTPUT, radius=self.socket_radius, color=self.socket_color)
-            x_pos = x_start_right - (i * self.grid_size)
-            socket.setPos(x_pos, self.height)
-            self.bottom_sockets.append(socket)
+    def _update_static_field_value(self, index, text):
+        """
+        Updates the internal data model for a static field.
+        """
+        self.static_fields[index]['value'] = text
+        
+    def _update_input_value(self, index, text):
+        """
+        Updates the internal data model for an input field.
+        """
+        self.input_values[index]['value'] = text
 
     def get_all_sockets(self):
         """
-        Returns a list of all sockets on this node.
+        Returns a list of all socket objects on this node.
         """
-        return self.left_sockets + self.right_sockets + self.top_sockets + self.bottom_sockets
+        return list(self.sockets.values())
+
+    def get_output_sockets(self):
+        """
+        Returns a list of all output sockets on this node.
+        """
+        return [s for s in self.sockets.values() if s.socket_type == SOCKET_TYPE_OUTPUT]
 
     def boundingRect(self):
         """
         Returns the bounding rectangle, expanded to include sockets.
         """
         margin = self.pen_border_selected.width() / 2
-        socket_margin = self.socket_radius
-        return QRectF(0 - margin - socket_margin, 0 - margin - socket_margin,
-                      self.width + (margin + socket_margin) * 2,
-                      self.height + (margin + socket_margin) * 2)
+        socket_radius = 5.0 
+        return QRectF(0 - margin - socket_radius, 0 - margin - socket_radius,
+                      self.width + (margin + socket_radius) * 2,
+                      self.height + (margin + socket_radius) * 2)
 
     def paint(self, painter, option, widget=None):
         """
-        Draws the node. Sockets are child items and draw themselves.
+        Draws the node body, title, labels, and fields.
+        Sockets and proxy widgets are child items and draw themselves.
         """
+        # --- Body ---
         body_path = QPainterPath()
         body_rect = QRectF(0, 0, self.width, self.height)
         body_path.addRoundedRect(body_rect, self.corner_radius, self.corner_radius)
@@ -272,6 +298,7 @@ class NLDPNode(QGraphicsItem):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawPath(body_path)
 
+        # --- Title Bar ---
         painter.setBrush(self.color_title_bar)
         painter.setPen(Qt.PenStyle.NoPen)
         title_rounded_path = QPainterPath()
@@ -280,6 +307,7 @@ class NLDPNode(QGraphicsItem):
         unrounder_rect = QRectF(0, self.corner_radius, self.width, self.title_bar_height - self.corner_radius)
         painter.drawRect(unrounder_rect)
 
+        # --- Title Text ---
         painter.setPen(self.color_title_text)
         font = painter.font()
         font.setPointSize(10)
@@ -288,6 +316,26 @@ class NLDPNode(QGraphicsItem):
         text_rect = QRectF(text_padding, 0, self.width - text_padding, self.title_bar_height)
         painter.drawText(text_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self.title)
 
+        # --- Draw Row Labels ---
+        painter.setPen(self.color_label_text)
+        font.setPointSize(9)
+        painter.setFont(font)
+        
+        for i, row_data in enumerate(self.layout):
+            y_pos = self.title_bar_height + (i * self.grid_size)
+            row_rect = QRectF(0, y_pos, self.width, self.grid_size)
+            label = row_data.get('label', '')
+
+            if row_data['type'] == ROW_TYPE_INPUT:
+                painter.drawText(row_rect.adjusted(12, 0, 0, 0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, label)
+            
+            elif row_data['type'] == ROW_TYPE_OUTPUT:
+                painter.drawText(row_rect.adjusted(0, 0, -12, 0), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, label)
+
+            elif row_data['type'] == ROW_TYPE_STATIC_FIELD:
+                painter.drawText(row_rect.adjusted(12, 0, 0, 0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, label)
+
+        # --- Border ---
         is_selected = bool(option.state & QStyle.StateFlag.State_Selected)
         if self.show_border or is_selected:
             border_path = QPainterPath()
@@ -312,8 +360,6 @@ class NLDPNode(QGraphicsItem):
                              view._spacebar_pressed)
 
             if is_title_bar_click or is_space_drag:
-                # If this is a move operation, clear the scene's selection
-                # and select only this node.
                 if self.scene():
                     self.scene().clearSelection()
                 self.setSelected(True)
@@ -331,10 +377,8 @@ class NLDPNode(QGraphicsItem):
         """
         if self._is_dragging:
             self.setPos(event.scenePos() + self._drag_offset)
-            # --- Update connected wires ---
             for socket in self.get_all_sockets():
                 for connection in socket.connections:
-                    # Find the wire associated with this connection
                     for item in self.scene().items():
                         if isinstance(item, NLDPWire) and \
                            ((item.start_socket == socket and item.end_socket == connection) or \
@@ -394,9 +438,6 @@ class NLDPView(QGraphicsView):
     def contextMenuEvent(self, event):
         """
         Handles right-click events to show the appropriate context menu.
-        - Right-Click: Add Node menu.
-        - Space + Right-Click: Editor Actions menu.
-        - Shift + Right-Click: Contextual Actions menu.
         """
         menu = QMenu(self)
         
@@ -406,10 +447,10 @@ class NLDPView(QGraphicsView):
                 background-color: #d98c00;
                 color: white;
                 border: 0;
-                margin: 4px; /* Creates a small gap for the submenu */
+                margin: 2px;
             }
             QMenu::pane {
-                border: 0; /* Disables the default frame and shadow */
+                border: 0;
             }
             QMenu::item {
                 padding: 2px 24px;
@@ -431,7 +472,6 @@ class NLDPView(QGraphicsView):
             
             action = menu.exec(event.globalPos())
 
-            # Reset the spacebar state immediately after the menu closes to prevent it getting stuck.
             self._spacebar_pressed = False
 
             if action == new_action:
@@ -458,68 +498,56 @@ class NLDPView(QGraphicsView):
                 menu.exec(event.globalPos())
 
         else:
-            # --- Add Node Menu ---
-            test_menu = menu.addMenu("Test")
-            add_node1_action = test_menu.addAction("Simple I/O Node")
-            add_node2_action = test_menu.addAction("Processing Node")
-            add_node3_action = test_menu.addAction("Output Only Node")
-
-            more_tests_menu = menu.addMenu("More Tests")
-            add_node4_action = more_tests_menu.addAction("Top/Bottom Node")
-            add_node5_action = more_tests_menu.addAction("Wide Node")
-            
-            action = menu.exec(event.globalPos())
+            # --- Add Node Menu (using the new layout system) ---
             scene_pos = self.mapToScene(event.pos())
             
-            if action == add_node1_action:
-                new_node = NLDPNode(title="Simple I/O", x=scene_pos.x(), y=scene_pos.y(), left_sockets=2, right_sockets=1)
-                self.scene().addItem(new_node)
-            elif action == add_node2_action:
-                new_node = NLDPNode(title="Processing", x=scene_pos.x(), y=scene_pos.y(), left_sockets=1, right_sockets=2, color=(20, 90, 20))
-                self.scene().addItem(new_node)
-            elif action == add_node3_action:
-                new_node = NLDPNode(title="Output Only", x=scene_pos.x(), y=scene_pos.y(), right_sockets=1, color=(20, 20, 90))
-                self.scene().addItem(new_node)
-            elif action == add_node4_action:
-                new_node = NLDPNode(title="Top/Bottom", x=scene_pos.x(), y=scene_pos.y(), top_sockets=2, bottom_sockets=2, color=(90, 90, 20))
-                self.scene().addItem(new_node)
-            elif action == add_node5_action:
-                new_node = NLDPNode(title="Wide Node", width_units=12, height_units=4, x=scene_pos.x(), y=scene_pos.y(), left_sockets=1, right_sockets=1, color=(90, 20, 90))
-                self.scene().addItem(new_node)
+            test_menu = menu.addMenu("Test")
+            
+            # Define layouts for the test nodes
+            layout1 = [{'type': ROW_TYPE_INPUT, 'label': 'In A'},
+                       {'type': ROW_TYPE_INPUT, 'label': 'In B'},
+                       {'type': ROW_TYPE_OUTPUT, 'label': 'Out'}]
+            node1_action = test_menu.addAction("Simple I/O Node")
+            
+            layout2 = [{'type': ROW_TYPE_INPUT, 'label': 'Source'},
+                       {'type': ROW_TYPE_STATIC_FIELD, 'label': 'Factor', 'default_value': 0.75},
+                       {'type': ROW_TYPE_OUTPUT, 'label': 'Result A'},
+                       {'type': ROW_TYPE_OUTPUT, 'label': 'Result B'}]
+            node2_action = test_menu.addAction("Processing Node")
+            
+            layout3 = [{'type': ROW_TYPE_OUTPUT, 'label': 'Data'}]
+            node3_action = test_menu.addAction("Output Only Node")
+            
+            action = menu.exec(event.globalPos())
+            
+            if action == node1_action:
+                self.scene().addItem(NLDPNode(title="Simple I/O", layout=layout1, x=scene_pos.x(), y=scene_pos.y()))
+            elif action == node2_action:
+                self.scene().addItem(NLDPNode(title="Processing", layout=layout2, x=scene_pos.x(), y=scene_pos.y(), color=(20, 90, 20)))
+            elif action == node3_action:
+                self.scene().addItem(NLDPNode(title="Output Only", layout=layout3, x=scene_pos.x(), y=scene_pos.y(), color=(20, 20, 90)))
 
 
     def is_circular_connection(self, start_socket, end_socket):
         """
         Checks if creating a wire between two sockets would create a cycle.
-
-        Args:
-            start_socket (NLDPSocket): The proposed starting socket.
-            end_socket (NLDPSocket): The proposed ending socket.
-
-        Returns:
-            bool: True if a cycle would be created, False otherwise.
         """
-        # Determine the start and end nodes for the traversal
         output_socket = start_socket if start_socket.socket_type == SOCKET_TYPE_OUTPUT else end_socket
         input_socket = end_socket if end_socket.socket_type == SOCKET_TYPE_INPUT else start_socket
         
         start_node = output_socket.parentItem()
         end_node = input_socket.parentItem()
 
-        # Use a breadth-first search to traverse downstream from the end_node
         nodes_to_visit = [end_node]
         visited_nodes = {end_node}
 
         while nodes_to_visit:
             current_node = nodes_to_visit.pop(0)
             
-            # If we reach the start_node, we have found a cycle
             if current_node == start_node:
                 return True
 
-            # Get all output sockets from the current node
-            output_sockets = current_node.right_sockets + current_node.bottom_sockets
-            for socket in output_sockets:
+            for socket in current_node.get_output_sockets():
                 for connection in socket.connections:
                     next_node = connection.parentItem()
                     if next_node not in visited_nodes:
@@ -542,10 +570,8 @@ class NLDPView(QGraphicsView):
         for item in selected_items:
             if isinstance(item, NLDPNode):
                 nodes_to_remove.append(item)
-                # Find all wires connected to this node's sockets
                 for socket in item.get_all_sockets():
                     for connected_socket in socket.connections:
-                        # Find the wire that connects these two sockets
                         for scene_item in self.scene().items():
                             if isinstance(scene_item, NLDPWire):
                                 if (scene_item.start_socket == socket and scene_item.end_socket == connected_socket) or \
@@ -554,7 +580,6 @@ class NLDPView(QGraphicsView):
             elif isinstance(item, NLDPWire):
                 wires_to_remove.add(item)
 
-        # Remove all identified items from the scene
         for wire in wires_to_remove:
             self.scene().removeItem(wire)
         for node in nodes_to_remove:
@@ -609,7 +634,6 @@ class NLDPView(QGraphicsView):
         if is_cutting:
             self._is_cutting = True
             self.setCursor(Qt.CursorShape.CrossCursor)
-            # Immediately check for a wire to delete on click
             item_to_cut = self.itemAt(event.position().toPoint())
             if isinstance(item_to_cut, NLDPWire):
                 self.scene().removeItem(item_to_cut)
@@ -660,21 +684,15 @@ class NLDPView(QGraphicsView):
         if is_shift_select:
             item_to_select = self.itemAt(event.position().toPoint())
             if isinstance(item_to_select, NLDPNode):
-                # Toggle the selection state of the item without clearing others
                 item_to_select.setSelected(not item_to_select.isSelected())
                 event.accept()
                 return
         
         if event.button() == Qt.MouseButton.LeftButton:
             # --- Rubber Band Selection ---
-            # If no other action is taken, a left-click drag will start a rubber band selection.
-            # Change the cursor to indicate this.
             self.setCursor(Qt.CursorShape.CrossCursor)
             super().mousePressEvent(event)
         
-        # Right-clicks are handled by contextMenuEvent, so we don't call super() for them here.
-        # This prevents the default right-click drag/select behavior.
-
     def mouseMoveEvent(self, event):
         """
         Handles mouse move events for various interactions.
@@ -756,37 +774,29 @@ class NLDPView(QGraphicsView):
 
         # --- Wire Drawing ---
         if self.drawing_wire:
-            # Hide the ghost wire to check what's underneath
             self.drawing_wire.hide()
             end_item = self.itemAt(event.position().toPoint())
             
-            # Check for a valid connection
             is_valid_target = isinstance(end_item, NLDPSocket) and self.start_socket != end_item
             is_valid_type = is_valid_target and self.start_socket.socket_type != end_item.socket_type
             is_not_circular = is_valid_type and not self.is_circular_connection(self.start_socket, end_item)
 
             if is_valid_target and is_valid_type and is_not_circular:
                 
-                # Determine which socket is the input
                 input_socket = end_item if end_item.socket_type == SOCKET_TYPE_INPUT else self.start_socket
                 
-                # --- Enforce single connection for INPUT sockets ---
                 if input_socket.connections:
-                    # Get the old socket it was connected to
                     old_partner_socket = input_socket.connections[0]
-                    # Find and remove the old wire from the scene
                     for item in self.scene().items():
                         if isinstance(item, NLDPWire) and \
                            ((item.start_socket == input_socket and item.end_socket == old_partner_socket) or \
                             (item.start_socket == old_partner_socket and item.end_socket == input_socket)):
                             self.scene().removeItem(item)
-                            break # Found and removed the old wire
+                            break
                 
-                # --- Create a permanent wire ---
                 wire = NLDPWire(self.start_socket, end_item)
                 self.scene().addItem(wire)
 
-            # Clean up the ghost wire
             self.scene().removeItem(self.drawing_wire)
             self.drawing_wire = None
             self.start_socket = None
@@ -810,7 +820,6 @@ class NLDPView(QGraphicsView):
             event.accept()
             return
         
-        # Reset cursor after a rubber band selection
         self.setCursor(Qt.CursorShape.ArrowCursor)
 
         super().mouseReleaseEvent(event)
@@ -884,37 +893,7 @@ class NLDPWindow(QMainWindow):
         # Set the view as the central widget of the main window
         self.setCentralWidget(self.view)
 
-        # --- Add a test node ---
-        node = NLDPNode(
-            title="ALPHA",
-            width_units=8,
-            height_units=4,
-            left_sockets=2,
-            right_sockets=1
-        )
-        self.scene.addItem(node)
 
-        node2 = NLDPNode(
-            title="BETA",
-            x=16*16,
-            width_units=7,
-            height_units=13,
-            left_sockets=4,
-            right_sockets=1
-        )
-        self.scene.addItem(node2)
-
-        node3 = NLDPNode(
-            title="GAMMA",
-            y=8*16,
-            width_units=8,
-            height_units=4,
-            left_sockets=1,
-            right_sockets=1,
-            top_sockets=2,
-            bottom_sockets=1
-        )
-        self.scene.addItem(node3)
 
 
 if __name__ == "__main__":
