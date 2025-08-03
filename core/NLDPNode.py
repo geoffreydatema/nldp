@@ -59,6 +59,34 @@ class NLDPNode(QGraphicsItem):
         self.setAcceptHoverEvents(True)
         self.setPos(x, y)
 
+    def evaluate(self):
+        """
+        The core data processing method. This is a placeholder in the base class
+        and should be overridden by specific node implementations.
+        """
+        print(f"Evaluating node: {self.title}")
+        pass
+
+    def get_input_value(self, index):
+        """
+        Gets the value for a specific input row.
+        If a wire is connected, it fetches the value from the upstream node's output.
+        Otherwise, it returns the default value from its own input field.
+        """
+        socket = self.sockets.get(index)
+        if socket and socket.connections:
+            # Get the connected upstream socket
+            upstream_socket = socket.connections[0]
+            upstream_node = upstream_socket.parentItem()
+            
+            # Find the corresponding output value on the upstream node
+            for i, s in upstream_node.sockets.items():
+                if s == upstream_socket:
+                    return upstream_node.output_values[i]['value']
+        
+        # No connection, return the local default value
+        return self.input_values.get(index, {}).get('value')
+
     def _build_from_layout(self):
         """
         Creates sockets and UI fields based on the layout definition.

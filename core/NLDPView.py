@@ -2,6 +2,7 @@ from PySide6.QtWidgets import QApplication, QGraphicsView, QGraphicsPathItem, QM
 from PySide6.QtGui import QColor, QPainter, QPen, QPainterPath, QCursor
 from PySide6.QtCore import Qt, QRectF, QLineF, QPoint, QPointF, QEvent
 from . import constants, NLDPNode, NLDPWire, NLDPSocket
+from standard import NLDPStandardValueNode, NLDPStandardOutputNode
 
 class NLDPView(QGraphicsView):
     """
@@ -46,7 +47,6 @@ class NLDPView(QGraphicsView):
     def _on_editor_menu_closed(self):
         """
         Ensures the menu state is cleaned up whenever the menu is closed.
-        This is connected to the menu's aboutToHide signal.
         """
         if self._editor_menu:
             self._install_menu_event_filter(self._editor_menu, remove=True)
@@ -86,7 +86,6 @@ class NLDPView(QGraphicsView):
         """
         Handles right-click events to show the appropriate context menu.
         """
-        # If a zoom drag was just completed, ignore this context menu event.
         if self._ignore_next_context_menu:
             self._ignore_next_context_menu = False
             event.accept()
@@ -127,14 +126,18 @@ class NLDPView(QGraphicsView):
                 node_under_cursor = item_under_cursor.parentItem()
 
             if node_under_cursor:
-                # Clear existing selection and select only the clicked node
                 self.scene().clearSelection()
                 node_under_cursor.setSelected(True)
 
                 delete_action = menu.addAction("Delete Node(s)")
+                evaluate_action = menu.addAction("Evaluate")
+                
                 action = menu.exec(event.globalPos())
+                
                 if action == delete_action:
                     self._delete_selected_items()
+                elif action == evaluate_action:
+                    self._evaluate_graph()
             else:
                 placeholder_action = menu.addAction("Placeholder Action")
                 menu.exec(event.globalPos())
@@ -142,33 +145,37 @@ class NLDPView(QGraphicsView):
         else:
             # --- Add Node Menu (using the new layout system) ---
             scene_pos = self.mapToScene(event.pos())
-            
+    
             test_menu = menu.addMenu("Test")
             
-            # Define layouts for the test nodes
-            layout1 = [{'type': constants.ROW_TYPE_INPUT, 'label': 'In A'},
-                       {'type': constants.ROW_TYPE_INPUT, 'label': 'In B'},
-                       {'type': constants.ROW_TYPE_OUTPUT, 'label': 'Out'}]
-            node1_action = test_menu.addAction("Simple I/O Node")
-            
-            layout2 = [{'type': constants.ROW_TYPE_INPUT, 'label': 'Source'},
-                       {'type': constants.ROW_TYPE_STATIC_FIELD, 'label': 'Factor', 'default_value': 0.75},
-                       {'type': constants.ROW_TYPE_OUTPUT, 'label': 'Result A'},
-                       {'type': constants.ROW_TYPE_OUTPUT, 'label': 'Result B'}]
-            node2_action = test_menu.addAction("Processing Node")
-            
-            layout3 = [{'type': constants.ROW_TYPE_OUTPUT, 'label': 'Data'}]
-            node3_action = test_menu.addAction("Output Only Node")
+            node1_action = test_menu.addAction("Value Node")
+            node2_action = test_menu.addAction("Output Node")
             
             action = menu.exec(event.globalPos())
             
             if action == node1_action:
-                self.scene().addItem(NLDPNode(title="Simple I/O", layout=layout1, x=scene_pos.x(), y=scene_pos.y()))
+                self.scene().addItem(NLDPStandardValueNode(x=scene_pos.x(), y=scene_pos.y()))
             elif action == node2_action:
-                self.scene().addItem(NLDPNode(title="Processing", layout=layout2, x=scene_pos.x(), y=scene_pos.y(), color=(20, 90, 20)))
-            elif action == node3_action:
-                self.scene().addItem(NLDPNode(title="Output Only", layout=layout3, x=scene_pos.x(), y=scene_pos.y(), color=(20, 20, 90)))
+                self.scene().addItem(NLDPStandardOutputNode(x=scene_pos.x(), y=scene_pos.y()))
 
+    def _evaluate_graph(self):
+        """
+        Initiates the evaluation of the selected node and its dependencies.
+        """
+        selected_nodes = [item for item in self.scene().selectedItems() if isinstance(item, NLDPNode)]
+        if not selected_nodes:
+            print("No node selected to evaluate.")
+            return
+        
+        # For now, we'll just evaluate the first selected node.
+        # Later, this will involve graph traversal and topological sorting.
+        target_node = selected_nodes[0]
+        
+        # Placeholder for the full evaluation sequence
+        print("--- Starting Evaluation ---")
+        target_node.evaluate()
+        print("Output values:", target_node.output_values)
+        print("-------------------------")
 
     def is_circular_connection(self, start_socket, end_socket):
         """
