@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import QMainWindow, QGraphicsScene
 from PySide6.QtGui import QColor
 from core import NLDPView
+from standard import NLDPStandardValueNode, NLDPStandardOutputNode
 
 class NLDPWindow(QMainWindow):
     """
@@ -29,3 +30,6 @@ class NLDPWindow(QMainWindow):
         
         # Set the view as the central widget of the main window
         self.setCentralWidget(self.view)
+
+        self.scene.addItem(NLDPStandardValueNode(x=0, y=0))
+        self.scene.addItem(NLDPStandardOutputNode(x=8*32, y=0))

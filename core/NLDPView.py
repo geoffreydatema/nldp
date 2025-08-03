@@ -129,8 +129,8 @@ class NLDPView(QGraphicsView):
                 self.scene().clearSelection()
                 node_under_cursor.setSelected(True)
 
-                delete_action = menu.addAction("Delete Node(s)")
                 evaluate_action = menu.addAction("Evaluate")
+                delete_action = menu.addAction("Delete Node(s)")
                 
                 action = menu.exec(event.globalPos())
                 
