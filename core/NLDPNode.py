@@ -96,25 +96,38 @@ class NLDPNode(QGraphicsItem):
 
     def _gather_inputs(self):
         """
-        Gathers all input values for the node, from both wires and local fields.
+        Gathers all input values for the node, unifying all input types
+        (INPUT, DYNAMIC, and STATIC) into a single dictionary that will be
+        passed to the evaluate() method. This is the core of the abstraction
+        that simplifies node development.
         """
         gathered_inputs = {}
-        for i, data in self.input_values.items():
-            socket = self.sockets.get(i)
-            if socket and socket.connections:
-                # If connected, recursively evaluate and get the value from the upstream node.
-                upstream_socket = socket.connections[0]
-                upstream_node = upstream_socket.parentItem()
-                upstream_node.cook() # Call the main cook method
-                
-                # Find the corresponding output value on the upstream node
-                for j, s in upstream_node.sockets.items():
-                    if s == upstream_socket:
-                        gathered_inputs[i] = upstream_node.output_values[j]['value']
-                        break
-            else:
-                # If not connected, use the local default value.
-                gathered_inputs[i] = data['value']
+        for i, row_data in enumerate(self.layout):
+            row_type = row_data.get('type')
+
+            # Handle rows that can receive connections
+            if row_type in [constants.ROW_TYPE_INPUT, constants.ROW_TYPE_DYNAMIC]:
+                socket = self.sockets.get(i)
+                # Check if a wire is connected
+                if socket and socket.connections:
+                    # If connected, recursively evaluate the upstream node to get its fresh output.
+                    upstream_socket = socket.connections[0]
+                    upstream_node = upstream_socket.parentItem()
+                    upstream_node.cook()
+                    
+                    # Find the corresponding output value on the upstream node
+                    for j, s in upstream_node.sockets.items():
+                        if s == upstream_socket:
+                            gathered_inputs[i] = upstream_node.output_values[j]['value']
+                            break
+                else:
+                    # If not connected, use the local default value for this input row.
+                    gathered_inputs[i] = self.input_values[i]['value']
+            
+            # Handle rows that are static values only
+            elif row_type == constants.ROW_TYPE_STATIC:
+                # For static fields, just use the value from the UI field.
+                gathered_inputs[i] = self.static_fields[i]['value']
         return gathered_inputs
 
     def _store_outputs(self, outputs):
@@ -153,11 +166,15 @@ class NLDPNode(QGraphicsItem):
                 socket.set_properties(constants.SOCKET_TYPE_INPUT, label, QColor(255, 165, 0))
                 socket.setPos(0, y_pos)
                 self.sockets[i] = socket
-                
-                self.input_values[i] = {'label': label, 'value': row_data.get('default_value')}
+                self.input_values[i] = {'label': label, 'value': None} # No default value
 
-                if 'default_value' in row_data:
-                    self._create_proxy_widget(i, row_data, y_pos, self._update_input_value)
+            elif row_type == constants.ROW_TYPE_DYNAMIC:
+                socket = NLDPSocket(parent=self)
+                socket.set_properties(constants.SOCKET_TYPE_INPUT, label, QColor(255, 165, 0))
+                socket.setPos(0, y_pos)
+                self.sockets[i] = socket
+                self.input_values[i] = {'label': label, 'value': row_data.get('default_value')}
+                self._create_proxy_widget(i, row_data, y_pos, self._update_input_value)
 
             elif row_type == constants.ROW_TYPE_OUTPUT:
                 socket = NLDPSocket(parent=self)
@@ -166,7 +183,7 @@ class NLDPNode(QGraphicsItem):
                 self.sockets[i] = socket
                 self.output_values[i] = {'label': label, 'value': None}
             
-            elif row_type == constants.ROW_TYPE_STATIC_FIELD:
+            elif row_type == constants.ROW_TYPE_STATIC:
                 self.static_fields[i] = {'label': label, 'value': row_data.get('default_value', '')}
                 self._create_proxy_widget(i, row_data, y_pos, self._update_static_field_value)
 
@@ -262,13 +279,13 @@ class NLDPNode(QGraphicsItem):
             row_rect = QRectF(0, y_pos, self.width, self.grid_size)
             label = row_data.get('label', '')
 
-            if row_data['type'] == constants.ROW_TYPE_INPUT:
+            if row_data['type'] in [constants.ROW_TYPE_INPUT, constants.ROW_TYPE_DYNAMIC]:
                 painter.drawText(row_rect.adjusted(12, 0, 0, 0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, label)
             
             elif row_data['type'] == constants.ROW_TYPE_OUTPUT:
                 painter.drawText(row_rect.adjusted(0, 0, -12, 0), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, label)
 
-            elif row_data['type'] == constants.ROW_TYPE_STATIC_FIELD:
+            elif row_data['type'] == constants.ROW_TYPE_STATIC:
                 painter.drawText(row_rect.adjusted(12, 0, 0, 0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, label)
 
         # --- Border ---

@@ -2,7 +2,7 @@ from PySide6.QtWidgets import QApplication, QGraphicsView, QGraphicsPathItem, QM
 from PySide6.QtGui import QColor, QPainter, QPen, QPainterPath, QCursor
 from PySide6.QtCore import Qt, QRectF, QLineF, QPoint, QPointF, QEvent
 from . import constants, NLDPNode, NLDPWire, NLDPSocket
-from standard import NLDPStandardValueNode, NLDPStandardOutputNode
+from standard import NLDPStandardValueNode, NLDPStandardOutputNode, NLDPMathAddNode
 
 class NLDPView(QGraphicsView):
     """
@@ -146,17 +146,21 @@ class NLDPView(QGraphicsView):
             # --- Add Node Menu (using the new layout system) ---
             scene_pos = self.mapToScene(event.pos())
     
-            test_menu = menu.addMenu("Test")
+            standard_menu = menu.addMenu("Standard")
+            math_menu = menu.addMenu("Math")
             
-            node1_action = test_menu.addAction("Value Node")
-            node2_action = test_menu.addAction("Output Node")
+            value_node_action = standard_menu.addAction("Value")
+            output_node_action = standard_menu.addAction("Output")
+            add_node_action = math_menu.addAction("Add")
             
             action = menu.exec(event.globalPos())
             
-            if action == node1_action:
+            if action == value_node_action:
                 self.scene().addItem(NLDPStandardValueNode(x=scene_pos.x(), y=scene_pos.y()))
-            elif action == node2_action:
+            elif action == output_node_action:
                 self.scene().addItem(NLDPStandardOutputNode(x=scene_pos.x(), y=scene_pos.y()))
+            elif action == add_node_action:
+                self.scene().addItem(NLDPMathAddNode(x=scene_pos.x(), y=scene_pos.y()))
 
     def _evaluate_graph(self):
         """
