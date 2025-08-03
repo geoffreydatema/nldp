@@ -11,12 +11,12 @@ class NLDPStandardValueNode(NLDPNode):
         ]
         super().__init__(title="Value", layout=layout, x=x, y=y)
 
-    def evaluate(self):
+    def evaluate(self, inputs):
         """
         Passes the static field value to the output.
         """
-        # The static field is at row 0
+        # Get the value from the static field at row 0
         value = self.static_fields[0]['value']
         
-        # The output socket is at row 1
-        self.output_values[1]['value'] = value
+        # Return a dictionary mapping the output row index to the value
+        return {1: value} # Output is at row 1

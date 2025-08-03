@@ -13,13 +13,12 @@ class NLDPStandardOutputNode(NLDPNode):
         # This is the internal, "hidden" member for the final result.
         self.final_result = None
 
-    def evaluate(self):
+    def evaluate(self, inputs):
         """
         Fetches the input value and stores it as the final result.
         """
-        # The input socket is at row 0
-        input_value = self.get_input_value(0)
-        self.final_result = input_value
+        # The input is at row 0
+        self.final_result = inputs.get(0)
         
-        # For debugging, we'll print the final result.
-        print(f"Output Node Result: {self.final_result}")
+        # This node has no outputs, so it returns an empty dictionary.
+        return {}

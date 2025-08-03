@@ -62,57 +62,82 @@ class NLDPNode(QGraphicsItem):
         self.setAcceptHoverEvents(True)
         self.setPos(x, y)
 
+    def cook(self):
+        """
+        The final evaluation method that orchestrates the cooking process.
+        This should not be overridden by child classes.
+        """
+        if not self.is_dirty:
+            return
+
+        print(f"Cooking node: {self.title}")
+        
+        # 1. Gather all inputs, which triggers recursive evaluation of dependencies.
+        inputs = self._gather_inputs()
+        
+        # 2. Call the developer's custom logic.
+        outputs = self.evaluate(inputs)
+        
+        # 3. Store the results.
+        self._store_outputs(outputs)
+        
+        # 4. Mark the node as clean.
+        self.is_dirty = False
+
+    def evaluate(self, inputs):
+        """
+        The method to be overridden by developers for custom node logic.
+        It receives all input values and should return a dictionary of output values.
+        """
+        print(f"  - Evaluating: {self.title}")
+        print(f"  - Inputs: {inputs}")
+        # This base method does nothing and returns an empty dictionary.
+        return {}
+
+    def _gather_inputs(self):
+        """
+        Gathers all input values for the node, from both wires and local fields.
+        """
+        gathered_inputs = {}
+        for i, data in self.input_values.items():
+            socket = self.sockets.get(i)
+            if socket and socket.connections:
+                # If connected, recursively evaluate and get the value from the upstream node.
+                upstream_socket = socket.connections[0]
+                upstream_node = upstream_socket.parentItem()
+                upstream_node.cook() # Call the main cook method
+                
+                # Find the corresponding output value on the upstream node
+                for j, s in upstream_node.sockets.items():
+                    if s == upstream_socket:
+                        gathered_inputs[i] = upstream_node.output_values[j]['value']
+                        break
+            else:
+                # If not connected, use the local default value.
+                gathered_inputs[i] = data['value']
+        return gathered_inputs
+
+    def _store_outputs(self, outputs):
+        """
+        Stores the computed output values in the node's data model.
+        """
+        for i, value in outputs.items():
+            if i in self.output_values:
+                self.output_values[i]['value'] = value
+
     def mark_dirty(self):
         """
         Marks this node as dirty and propagates the dirty state downstream.
         """
         if self.is_dirty:
-            return # Already dirty, no need to propagate further
+            return
         
         self.is_dirty = True
         
-        # Propagate to all connected downstream nodes
         for socket in self.get_output_sockets():
             for connection in socket.connections:
                 downstream_node = connection.parentItem()
                 downstream_node.mark_dirty()
-
-    def evaluate(self):
-        """
-        The core data processing method. This is a placeholder in the base class
-        and should be overridden by specific node implementations.
-        """
-        # If the node is not dirty, its output is already up-to-date.
-        if not self.is_dirty:
-            return
-        
-        print(f"Evaluating node: {self.title}")
-        
-        # Mark as clean *after* evaluation
-        self.is_dirty = False
-
-    def get_input_value(self, index):
-        """
-        Gets the value for a specific input row.
-        If a wire is connected, it recursively evaluates the upstream node and
-        fetches the value from its output. Otherwise, it returns the default value.
-        """
-        socket = self.sockets.get(index)
-        if socket and socket.connections:
-            # Get the connected upstream socket
-            upstream_socket = socket.connections[0]
-            upstream_node = upstream_socket.parentItem()
-            
-            # Recursively evaluate the upstream node to ensure its output is current
-            upstream_node.evaluate()
-            
-            # Find the corresponding output value on the upstream node
-            for i, s in upstream_node.sockets.items():
-                if s == upstream_socket:
-                    return upstream_node.output_values[i]['value']
-        
-        # No connection, return the local default value
-        return self.input_values.get(index, {}).get('value')
 
     def _build_from_layout(self):
         """

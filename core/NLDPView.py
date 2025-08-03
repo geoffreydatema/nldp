@@ -171,7 +171,7 @@ class NLDPView(QGraphicsView):
         
         print("--- Starting Evaluation ---")
         # The recursive pull system handles the evaluation order automatically.
-        target_node.evaluate()
+        target_node.cook()
         
         print(f"\nFinal output of '{target_node.title}':")
         if hasattr(target_node, 'final_result'):
