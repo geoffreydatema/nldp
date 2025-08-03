@@ -23,6 +23,9 @@ class NLDPNode(QGraphicsItem):
         self.title = title
         self.show_border = show_border
         
+        # --- Engine State ---
+        self.is_dirty = True
+
         # --- Visual Properties ---
         self.corner_radius = 8.0
         self.title_bar_height = 1 * self.grid_size
@@ -59,25 +62,49 @@ class NLDPNode(QGraphicsItem):
         self.setAcceptHoverEvents(True)
         self.setPos(x, y)
 
+    def mark_dirty(self):
+        """
+        Marks this node as dirty and propagates the dirty state downstream.
+        """
+        if self.is_dirty:
+            return # Already dirty, no need to propagate further
+        
+        self.is_dirty = True
+        
+        # Propagate to all connected downstream nodes
+        for socket in self.get_output_sockets():
+            for connection in socket.connections:
+                downstream_node = connection.parentItem()
+                downstream_node.mark_dirty()
+
     def evaluate(self):
         """
         The core data processing method. This is a placeholder in the base class
         and should be overridden by specific node implementations.
         """
+        # If the node is not dirty, its output is already up-to-date.
+        if not self.is_dirty:
+            return
+        
         print(f"Evaluating node: {self.title}")
-        pass
+        
+        # Mark as clean *after* evaluation
+        self.is_dirty = False
 
     def get_input_value(self, index):
         """
         Gets the value for a specific input row.
-        If a wire is connected, it fetches the value from the upstream node's output.
-        Otherwise, it returns the default value from its own input field.
+        If a wire is connected, it recursively evaluates the upstream node and
+        fetches the value from its output. Otherwise, it returns the default value.
         """
         socket = self.sockets.get(index)
         if socket and socket.connections:
             # Get the connected upstream socket
             upstream_socket = socket.connections[0]
             upstream_node = upstream_socket.parentItem()
+            
+            # Recursively evaluate the upstream node to ensure its output is current
+            upstream_node.evaluate()
             
             # Find the corresponding output value on the upstream node
             for i, s in upstream_node.sockets.items():
@@ -135,15 +162,17 @@ class NLDPNode(QGraphicsItem):
 
     def _update_static_field_value(self, index, text):
         """
-        Updates the internal data model for a static field.
+        Updates the internal data model for a static field and marks the node as dirty.
         """
         self.static_fields[index]['value'] = text
+        self.mark_dirty()
         
     def _update_input_value(self, index, text):
         """
-        Updates the internal data model for an input field.
+        Updates the internal data model for an input field and marks the node as dirty.
         """
         self.input_values[index]['value'] = text
+        self.mark_dirty()
 
     def get_all_sockets(self):
         """

@@ -160,21 +160,24 @@ class NLDPView(QGraphicsView):
 
     def _evaluate_graph(self):
         """
-        Initiates the evaluation of the selected node and its dependencies.
+        Initiates the evaluation of the selected node using the dirty-flag system.
         """
         selected_nodes = [item for item in self.scene().selectedItems() if isinstance(item, NLDPNode)]
         if not selected_nodes:
             print("No node selected to evaluate.")
             return
         
-        # For now, we'll just evaluate the first selected node.
-        # Later, this will involve graph traversal and topological sorting.
         target_node = selected_nodes[0]
         
-        # Placeholder for the full evaluation sequence
         print("--- Starting Evaluation ---")
+        # The recursive pull system handles the evaluation order automatically.
         target_node.evaluate()
-        print("Output values:", target_node.output_values)
+        
+        print(f"\nFinal output of '{target_node.title}':")
+        if hasattr(target_node, 'final_result'):
+             print(f"Result: {target_node.final_result}")
+        else:
+            print("Output values:", target_node.output_values)
         print("-------------------------")
 
     def is_circular_connection(self, start_socket, end_socket):
@@ -486,6 +489,9 @@ class NLDPView(QGraphicsView):
                 
                 wire = NLDPWire(self.start_socket, end_item)
                 self.scene().addItem(wire)
+                
+                # Mark the downstream node as dirty
+                input_socket.parentItem().mark_dirty()
 
             self.scene().removeItem(self.drawing_wire)
             self.drawing_wire = None

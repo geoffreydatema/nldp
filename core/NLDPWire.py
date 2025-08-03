@@ -1,6 +1,7 @@
-from PySide6.QtWidgets import QGraphicsPathItem
+from PySide6.QtWidgets import QGraphicsPathItem, QGraphicsItem
 from PySide6.QtGui import QColor, QPen, QPainterPath
 from PySide6.QtCore import Qt, QPointF
+from . import constants
 
 class NLDPWire(QGraphicsPathItem):
     """
@@ -35,6 +36,29 @@ class NLDPWire(QGraphicsPathItem):
 
         self.update_path()
 
+    def itemChange(self, change, value):
+        """
+        Handles cleanup when the wire is about to be removed from the scene.
+        This is the correct, safe way to handle disconnection logic.
+        """
+        if change == QGraphicsItem.GraphicsItemChange.ItemSceneHasChanged:
+            # This is called when the item is added to or removed from the scene.
+            # We are interested in the removal case.
+            if not self.scene(): # The item is being removed
+                # Disconnect sockets
+                if self.end_socket in self.start_socket.connections:
+                    self.start_socket.connections.remove(self.end_socket)
+                if self.start_socket in self.end_socket.connections:
+                    self.end_socket.connections.remove(self.start_socket)
+                
+                # Mark the downstream node as dirty since its input has changed
+                if self.start_socket.socket_type == constants.SOCKET_TYPE_INPUT:
+                    self.start_socket.parentItem().mark_dirty()
+                if self.end_socket.socket_type == constants.SOCKET_TYPE_INPUT:
+                    self.end_socket.parentItem().mark_dirty()
+
+        return super().itemChange(change, value)
+
     def update_path(self):
         """
         Calculates and sets the cubic Bezier path for the wire.
@@ -55,13 +79,3 @@ class NLDPWire(QGraphicsPathItem):
 
         path.cubicTo(control_point1, control_point2, end_pos)
         self.setPath(path)
-
-    def __del__(self):
-        """
-        Handles cleanup when the wire is deleted.
-        """
-        # Disconnect sockets
-        if self.end_socket in self.start_socket.connections:
-            self.start_socket.connections.remove(self.end_socket)
-        if self.start_socket in self.end_socket.connections:
-            self.end_socket.connections.remove(self.start_socket)
