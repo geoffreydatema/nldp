@@ -44,6 +44,9 @@ class NLDPView(QGraphicsView):
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
 
+        # Install a global event filter to reliably catch key releases
+        QApplication.instance().installEventFilter(self)
+
     def cook_graph(self):
         """
         Finds all endpoint nodes in the graph and cooks them, which triggers
@@ -63,42 +66,26 @@ class NLDPView(QGraphicsView):
                 print(f"Endpoint '{node.title}' Result: {node.dead_end_values}")
         print("--------------------------\n")
 
-    def _on_editor_menu_closed(self):
-        """
-        Ensures the menu state is cleaned up whenever the menu is closed.
-        """
-        if self._editor_menu:
-            self._install_menu_event_filter(self._editor_menu, remove=True)
-            self._editor_menu = None
-
-    def _install_menu_event_filter(self, menu, remove=False):
-        """
-        Recursively installs or removes the event filter on a menu and all its submenus.
-        """
-        if remove:
-            menu.removeEventFilter(self)
-        else:
-            menu.installEventFilter(self)
-        
-        for action in menu.actions():
-            if action.menu():
-                self._install_menu_event_filter(action.menu(), remove=remove)
-
     def eventFilter(self, watched, event):
         """
-        Filters events for the editor menu to catch the spacebar release.
+        Filters events globally to catch the spacebar release, even when a menu has focus.
         """
-        if isinstance(watched, QMenu) and event.type() == QEvent.Type.KeyRelease and \
+        if event.type() == QEvent.Type.KeyRelease and \
            event.key() == Qt.Key.Key_Space and not event.isAutoRepeat():
             
             if self._editor_menu:
-                action = self._editor_menu.activeAction()
+                # Get the action the user was hovering over when they released the key
+                active_menu = QApplication.activePopupWidget()
+                action = active_menu.activeAction() if active_menu else None
+                
                 self._editor_menu.close()
                 
                 if action and not action.menu(): # Only trigger if it's not a submenu
                     action.trigger()
 
-            return True # Event was handled
+                self._editor_menu = None
+                return True # Event was handled
+
         return super().eventFilter(watched, event)
 
     def contextMenuEvent(self, event):
@@ -303,7 +290,6 @@ class NLDPView(QGraphicsView):
                 }
             """
             self._editor_menu.setStyleSheet(menu_stylesheet)
-            self._editor_menu.aboutToHide.connect(self._on_editor_menu_closed)
             
             file_menu = self._editor_menu.addMenu("File")
             new_action = file_menu.addAction("New")
@@ -312,7 +298,6 @@ class NLDPView(QGraphicsView):
             new_action.triggered.connect(self.scene().clear)
             exit_action.triggered.connect(QApplication.instance().quit)
             
-            self._install_menu_event_filter(self._editor_menu) # Recursively install filter
             self._editor_menu.popup(QCursor.pos())
         
         super().keyPressEvent(event)
@@ -321,12 +306,8 @@ class NLDPView(QGraphicsView):
         """
         Tracks key releases for various editor actions.
         """
-        if event.key() == Qt.Key.Key_QuoteLeft and not event.isAutoRepeat(): # Backtick key
+        if event.key() == Qt.Key.Key_QuoteLeft and not event.isAutoRepeat():
             self._backtick_pressed = False
-        elif event.key() == Qt.Key.Key_Space and not event.isAutoRepeat():
-            if self._editor_menu:
-                # The event filter will handle the action, but we still need to close the menu
-                self._editor_menu.close()
         
         super().keyReleaseEvent(event)
 
