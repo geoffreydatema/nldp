@@ -6,7 +6,7 @@ class NLDPStandardOutputNode(NLDPNode):
     """
     def __init__(self, x=0, y=0):
         layout = [
-            {'type': constants.ROW_TYPE_INPUT, 'label': 'Input'}
+            {'field_type': constants.FIELD_TYPE_INPUT, 'label': 'Input'}
         ]
         super().__init__(title="Output", layout=layout, x=x, y=y, color=(50, 50, 70))
         

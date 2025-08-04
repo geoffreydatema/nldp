@@ -100,9 +100,9 @@ class NLDPNode(QGraphicsItem):
         """
         gathered_inputs = {}
         for i, row_data in enumerate(self.layout):
-            row_type = row_data.get('type')
+            field_type = row_data.get('field_type')
 
-            if row_type in [constants.ROW_TYPE_INPUT, constants.ROW_TYPE_DYNAMIC]:
+            if field_type in [constants.FIELD_TYPE_INPUT, constants.FIELD_TYPE_DYNAMIC]:
                 socket = self.sockets.get(i)
                 if socket and socket.connections:
                     upstream_socket = socket.connections[0]
@@ -113,14 +113,12 @@ class NLDPNode(QGraphicsItem):
                         if s == upstream_socket:
                             gathered_inputs[i] = upstream_node.output_values[j]['value']
                             break
-                elif row_type == constants.ROW_TYPE_DYNAMIC:
-                    # If a dynamic input is not connected, use its static field value.
+                elif field_type == constants.FIELD_TYPE_DYNAMIC:
                     gathered_inputs[i] = self.static_fields[i]['value']
                 else:
-                    # A pure input with no connection has no value.
                     gathered_inputs[i] = None
             
-            elif row_type == constants.ROW_TYPE_STATIC:
+            elif field_type == constants.FIELD_TYPE_STATIC:
                 gathered_inputs[i] = self.static_fields[i]['value']
 
         return gathered_inputs
@@ -152,17 +150,17 @@ class NLDPNode(QGraphicsItem):
         Creates sockets and UI fields based on the layout definition.
         """
         for i, row_data in enumerate(self.layout):
-            row_type = row_data.get('type')
+            field_type = row_data.get('field_type')
             label = row_data.get('label', '')
             y_pos = self.title_bar_height + (i * self.grid_size) + (self.grid_size / 2)
 
-            if row_type == constants.ROW_TYPE_INPUT:
+            if field_type == constants.FIELD_TYPE_INPUT:
                 socket = NLDPSocket(parent=self)
                 socket.set_properties(constants.SOCKET_TYPE_INPUT, label, QColor(255, 165, 0))
                 socket.setPos(0, y_pos)
                 self.sockets[i] = socket
 
-            elif row_type == constants.ROW_TYPE_DYNAMIC:
+            elif field_type == constants.FIELD_TYPE_DYNAMIC:
                 socket = NLDPSocket(parent=self)
                 socket.set_properties(constants.SOCKET_TYPE_INPUT, label, QColor(255, 165, 0))
                 socket.setPos(0, y_pos)
@@ -170,14 +168,14 @@ class NLDPNode(QGraphicsItem):
                 self.static_fields[i] = {'label': label, 'value': row_data.get('default_value')}
                 self._create_proxy_widget(i, row_data, y_pos, self._update_static_field_value)
 
-            elif row_type == constants.ROW_TYPE_OUTPUT:
+            elif field_type == constants.FIELD_TYPE_OUTPUT:
                 socket = NLDPSocket(parent=self)
                 socket.set_properties(constants.SOCKET_TYPE_OUTPUT, label, QColor(255, 165, 0))
                 socket.setPos(self.width, y_pos)
                 self.sockets[i] = socket
                 self.output_values[i] = {'label': label, 'value': None}
             
-            elif row_type == constants.ROW_TYPE_STATIC:
+            elif field_type == constants.FIELD_TYPE_STATIC:
                 self.static_fields[i] = {'label': label, 'value': row_data.get('default_value', '')}
                 self._create_proxy_widget(i, row_data, y_pos, self._update_static_field_value)
 
@@ -266,13 +264,13 @@ class NLDPNode(QGraphicsItem):
             row_rect = QRectF(0, y_pos, self.width, self.grid_size)
             label = row_data.get('label', '')
 
-            if row_data['type'] in [constants.ROW_TYPE_INPUT, constants.ROW_TYPE_DYNAMIC]:
+            if row_data['field_type'] in [constants.FIELD_TYPE_INPUT, constants.FIELD_TYPE_DYNAMIC]:
                 painter.drawText(row_rect.adjusted(12, 0, 0, 0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, label)
             
-            elif row_data['type'] == constants.ROW_TYPE_OUTPUT:
+            elif row_data['field_type'] == constants.FIELD_TYPE_OUTPUT:
                 painter.drawText(row_rect.adjusted(0, 0, -12, 0), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, label)
 
-            elif row_data['type'] == constants.ROW_TYPE_STATIC:
+            elif row_data['field_type'] == constants.FIELD_TYPE_STATIC:
                 painter.drawText(row_rect.adjusted(12, 0, 0, 0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, label)
 
         # --- Border ---

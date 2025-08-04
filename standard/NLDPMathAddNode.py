@@ -6,9 +6,9 @@ class NLDPMathAddNode(NLDPNode):
     """
     def __init__(self, x=0, y=0):
         layout = [
-            {'type': constants.ROW_TYPE_DYNAMIC, 'label': 'Value A', 'default_value': 0.0},
-            {'type': constants.ROW_TYPE_DYNAMIC, 'label': 'Value B', 'default_value': 0.0},
-            {'type': constants.ROW_TYPE_OUTPUT, 'label': 'Output'}
+            {'field_type': constants.FIELD_TYPE_DYNAMIC, 'label': 'Value A', 'default_value': 0.0},
+            {'field_type': constants.FIELD_TYPE_DYNAMIC, 'label': 'Value B', 'default_value': 0.0},
+            {'field_type': constants.FIELD_TYPE_OUTPUT, 'label': 'Output'}
         ]
         super().__init__(title="Value", layout=layout, x=x, y=y)
 
