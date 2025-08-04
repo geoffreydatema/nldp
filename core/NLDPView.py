@@ -287,7 +287,7 @@ class NLDPView(QGraphicsView):
                     background-color: #d98c00;
                     color: white;
                     border: 0;
-                    margin: 2px;
+                    margin: 4px;
                 }
                 QMenu::pane {
                     border: 0;
@@ -363,6 +363,7 @@ class NLDPView(QGraphicsView):
             item_to_cut = self.itemAt(event.position().toPoint())
             if isinstance(item_to_cut, NLDPWire):
                 self.scene().removeItem(item_to_cut)
+                self.cook_graph() # Trigger a cook after cutting a wire
             event.accept()
             return
 
@@ -429,6 +430,7 @@ class NLDPView(QGraphicsView):
             item_to_cut = self.itemAt(event.position().toPoint())
             if isinstance(item_to_cut, NLDPWire):
                 self.scene().removeItem(item_to_cut)
+                self.cook_graph() # Trigger a cook after cutting a wire
             event.accept()
             return
 
