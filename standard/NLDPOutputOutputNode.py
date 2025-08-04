@@ -4,11 +4,11 @@ class NLDPOutputOutputNode(NLDPNode):
     """
     An endpoint node that receives a value for display or final output.
     """
-    def __init__(self, x=0, y=0):
+    def __init__(self, x=0, y=0, **kwargs):
         layout = [
             {'label': 'Input', 'field_type': constants.FIELD_TYPE_INPUT}
         ]
-        super().__init__(title="Output", layout=layout, x=x, y=y, color=(50, 50, 70))
+        super().__init__(**kwargs, title="Output", layout=layout, x=x, y=y, color=(50, 50, 70))
         
         self.dead_end_values = []
 

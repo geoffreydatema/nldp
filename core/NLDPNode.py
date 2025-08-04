@@ -8,9 +8,18 @@ class NLDPNode(QGraphicsItem):
     Represents a single node in the NLDP graph.
     Builds its visual layout and sockets from a structured 'layout' list.
     """
-    def __init__(self, title="New Node", layout=None, show_border=False, color=None, x=0, y=0):
+    def __init__(self, title="New Node", layout=None, show_border=False, color=None, x=0, y=0, view=None):
         """
         Initializes the node.
+
+        Args:
+            title (str): The name to be displayed in the node's title bar.
+            layout (list[dict]): A list of dictionaries defining the node's rows.
+            show_border (bool): Whether to display the static design border.
+            color (tuple | list): An (R, G, B) tuple or list for the node's body color.
+            x (int | float): The initial x-position of the node in the scene.
+            y (int | float): The initial y-position of the node in the scene.
+            view (NLDPView): A reference to the parent view for connecting signals.
         """
         super().__init__()
 
@@ -22,6 +31,7 @@ class NLDPNode(QGraphicsItem):
         self.height = (len(self.layout) + 1) * self.grid_size
         self.title = title
         self.show_border = show_border
+        self.view = view
         
         # --- Engine State ---
         self.is_dirty = True
@@ -230,6 +240,9 @@ class NLDPNode(QGraphicsItem):
             proxy_widget.setGeometry(QRectF(self.width - field_width, y_pos - 7, field_width - 8, 15))
 
             line_edit.textChanged.connect(lambda text, i=index: update_callback(i, text))
+            # Connect the editingFinished signal to the view's cook_graph method
+            if self.view:
+                line_edit.editingFinished.connect(self.view.cook_graph)
 
     def _update_static_field_value(self, index, text):
         """

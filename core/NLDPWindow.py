@@ -31,6 +31,6 @@ class NLDPWindow(QMainWindow):
         # Set the view as the central widget of the main window
         self.setCentralWidget(self.view)
 
-        self.scene.addItem(NLDPInputFloatNode(x=-8*32, y=0))
-        self.scene.addItem(NLDPMathAddNode(x=0, y=0))
-        self.scene.addItem(NLDPOutputOutputNode(x=8*32, y=0))
+        self.scene.addItem(NLDPInputFloatNode(x=-8*32, y=0, view=self.view))
+        self.scene.addItem(NLDPMathAddNode(x=0, y=0, view=self.view))
+        self.scene.addItem(NLDPOutputOutputNode(x=8*32, y=0, view=self.view))

@@ -44,6 +44,25 @@ class NLDPView(QGraphicsView):
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
 
+    def cook_graph(self):
+        """
+        Finds all endpoint nodes in the graph and cooks them, which triggers
+        a full, efficient evaluation of all dirty nodes.
+        """
+        print("\n--- Auto-Cooking Graph ---")
+        endpoint_nodes = []
+        for item in self.scene().items():
+            if isinstance(item, NLDPNode):
+                # An endpoint is a node with no output sockets connected
+                if not any(s.connections for s in item.get_output_sockets()):
+                    endpoint_nodes.append(item)
+        
+        for node in endpoint_nodes:
+            node.cook()
+            if hasattr(node, 'dead_end_values'):
+                print(f"Endpoint '{node.title}' Result: {node.dead_end_values}")
+        print("--------------------------\n")
+
     def _on_editor_menu_closed(self):
         """
         Ensures the menu state is cleaned up whenever the menu is closed.
@@ -165,11 +184,11 @@ class NLDPView(QGraphicsView):
             action = menu.exec(event.globalPos())
             
             if action == value_node_action:
-                self.scene().addItem(NLDPInputFloatNode(x=scene_pos.x(), y=scene_pos.y()))
+                self.scene().addItem(NLDPInputFloatNode(x=scene_pos.x(), y=scene_pos.y(), view=self))
             elif action == output_node_action:
-                self.scene().addItem(NLDPOutputOutputNode(x=scene_pos.x(), y=scene_pos.y()))
+                self.scene().addItem(NLDPOutputOutputNode(x=scene_pos.x(), y=scene_pos.y(), view=self))
             elif action == add_node_action:
-                self.scene().addItem(NLDPMathAddNode(x=scene_pos.x(), y=scene_pos.y()))
+                self.scene().addItem(NLDPMathAddNode(x=scene_pos.x(), y=scene_pos.y(), view=self))
 
     def _evaluate_graph(self):
         """
@@ -249,6 +268,8 @@ class NLDPView(QGraphicsView):
             self.scene().removeItem(wire)
         for node in nodes_to_remove:
             self.scene().removeItem(node)
+        
+        self.cook_graph()
 
     def keyPressEvent(self, event):
         """
@@ -505,6 +526,7 @@ class NLDPView(QGraphicsView):
                 
                 # Mark the downstream node as dirty
                 input_socket.parentItem().mark_dirty()
+                self.cook_graph()
 
             self.scene().removeItem(self.drawing_wire)
             self.drawing_wire = None
