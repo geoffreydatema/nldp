@@ -202,7 +202,17 @@ class NLDPNode(QGraphicsItem):
         
         if widget_type == constants.WIDGET_LINEEDIT:
             line_edit = QLineEdit(str(row_data.get('default_value', '')))
-            line_edit.setStyleSheet("QLineEdit { background-color: #444; color: #eee; border: 1px solid #555; }")
+            # line_edit.setStyleSheet("QLineEdit { background-color: #444; color: #eee; border: 1px solid #555; font-size: 6pt; }")
+            line_edit.setStyleSheet("""
+                QLineEdit { 
+                    background-color: #444; 
+                    color: #eee; 
+                    border: 1px solid #555; 
+                    font-size: 8pt; 
+                    padding: 0px;
+                    margin: 0px;
+                }
+            """)
             
             # --- Add Validators based on data_type ---
             data_type = row_data.get('data_type')
@@ -211,11 +221,13 @@ class NLDPNode(QGraphicsItem):
             elif data_type == constants.DTYPE_FLOAT:
                 line_edit.setValidator(QDoubleValidator())
 
+
             proxy_widget = QGraphicsProxyWidget(self)
             proxy_widget.setWidget(line_edit)
             
-            field_width = self.width / 2 - 12
-            proxy_widget.setGeometry(QRectF(self.width - field_width - 8, y_pos - 10, field_width, 20))
+            field_width = self.width / 3
+            line_edit.setFixedHeight(15)
+            proxy_widget.setGeometry(QRectF(self.width - field_width, y_pos - 7, field_width - 8, 15))
 
             line_edit.textChanged.connect(lambda text, i=index: update_callback(i, text))
 
@@ -281,7 +293,7 @@ class NLDPNode(QGraphicsItem):
 
         # --- Draw Row Labels ---
         painter.setPen(self.color_label_text)
-        font.setPointSize(9)
+        font.setPointSize(8) # Smaller font for labels
         painter.setFont(font)
         
         for i, row_data in enumerate(self.layout):
