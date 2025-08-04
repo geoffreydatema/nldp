@@ -15,8 +15,5 @@ class NLDPStandardValueNode(NLDPNode):
         """
         Passes the static field value to the output.
         """
-        # Get the value from the static field at row 0
-        value = self.static_fields[0]['value']
-        
-        # Return a dictionary mapping the output row index to the value
-        return {1: value} # Output is at row 1
+        value = inputs[0]
+        return {1: value}

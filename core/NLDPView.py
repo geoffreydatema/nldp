@@ -130,6 +130,7 @@ class NLDPView(QGraphicsView):
                 node_under_cursor.setSelected(True)
 
                 evaluate_action = menu.addAction("Evaluate")
+                read_values_action = menu.addAction("Read Values")
                 delete_action = menu.addAction("Delete Node(s)")
                 
                 action = menu.exec(event.globalPos())
@@ -138,6 +139,11 @@ class NLDPView(QGraphicsView):
                     self._delete_selected_items()
                 elif action == evaluate_action:
                     self._evaluate_graph()
+                elif action == read_values_action:
+                    print(f"--- Reading Values for: {node_under_cursor.title} ---")
+                    print("Static Fields:", node_under_cursor.static_fields)
+                    print("Output Values:", node_under_cursor.output_values)
+                    print("---------------------------------------")
             else:
                 placeholder_action = menu.addAction("Placeholder Action")
                 menu.exec(event.globalPos())
@@ -173,16 +179,16 @@ class NLDPView(QGraphicsView):
         
         target_node = selected_nodes[0]
         
-        print("--- Starting Evaluation ---")
+        print("\n--- Starting Evaluation ---")
         # The recursive pull system handles the evaluation order automatically.
         target_node.cook()
         
         print(f"\nFinal output of '{target_node.title}':")
-        if hasattr(target_node, 'final_result'):
-             print(f"Result: {target_node.final_result}")
+        if hasattr(target_node, 'dead_end_values'):
+             print(f"Result: {target_node.dead_end_values}")
         else:
             print("Output values:", target_node.output_values)
-        print("-------------------------")
+        print("-------------------------\n")
 
     def is_circular_connection(self, start_socket, end_socket):
         """
