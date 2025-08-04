@@ -2,7 +2,7 @@ from PySide6.QtWidgets import QApplication, QGraphicsView, QGraphicsPathItem, QM
 from PySide6.QtGui import QColor, QPainter, QPen, QPainterPath, QCursor
 from PySide6.QtCore import Qt, QRectF, QLineF, QPoint, QPointF, QEvent
 from . import constants, NLDPNode, NLDPWire, NLDPSocket
-from standard import NLDPStandardValueNode, NLDPStandardOutputNode, NLDPMathAddNode
+from standard import NLDPInputFloatNode, NLDPOutputOutputNode, NLDPMathAddNode
 
 class NLDPView(QGraphicsView):
     """
@@ -99,7 +99,7 @@ class NLDPView(QGraphicsView):
                 background-color: #d98c00;
                 color: white;
                 border: 0;
-                margin: 2px;
+                margin: 4px;
             }
             QMenu::pane {
                 border: 0;
@@ -154,19 +154,20 @@ class NLDPView(QGraphicsView):
             # --- Add Node Menu (using the new layout system) ---
             scene_pos = self.mapToScene(event.pos())
     
-            standard_menu = menu.addMenu("Standard")
+            input_menu = menu.addMenu("Input")
+            output_menu = menu.addMenu("Output")
             math_menu = menu.addMenu("Math")
             
-            value_node_action = standard_menu.addAction("Value")
-            output_node_action = standard_menu.addAction("Output")
+            value_node_action = input_menu.addAction("Value")
+            output_node_action = output_menu.addAction("Output")
             add_node_action = math_menu.addAction("Add")
             
             action = menu.exec(event.globalPos())
             
             if action == value_node_action:
-                self.scene().addItem(NLDPStandardValueNode(x=scene_pos.x(), y=scene_pos.y()))
+                self.scene().addItem(NLDPInputFloatNode(x=scene_pos.x(), y=scene_pos.y()))
             elif action == output_node_action:
-                self.scene().addItem(NLDPStandardOutputNode(x=scene_pos.x(), y=scene_pos.y()))
+                self.scene().addItem(NLDPOutputOutputNode(x=scene_pos.x(), y=scene_pos.y()))
             elif action == add_node_action:
                 self.scene().addItem(NLDPMathAddNode(x=scene_pos.x(), y=scene_pos.y()))
 

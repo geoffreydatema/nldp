@@ -1,3 +1,3 @@
-from .NLDPStandardValueNode import NLDPStandardValueNode
-from .NLDPStandardOutputNode import NLDPStandardOutputNode
+from .NLDPInputFloatNode import NLDPInputFloatNode
+from .NLDPOutputOutputNode import NLDPOutputOutputNode
 from .NLDPMathAddNode import NLDPMathAddNode

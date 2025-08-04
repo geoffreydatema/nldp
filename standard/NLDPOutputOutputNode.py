@@ -1,12 +1,12 @@
 from core import constants, NLDPNode
 
-class NLDPStandardOutputNode(NLDPNode):
+class NLDPOutputOutputNode(NLDPNode):
     """
     An endpoint node that receives a value for display or final output.
     """
     def __init__(self, x=0, y=0):
         layout = [
-            {'field_type': constants.FIELD_TYPE_INPUT, 'label': 'Input', 'data_type': constants.DTYPE_STRING} # This input accepts any string representation
+            {'label': 'Input', 'field_type': constants.FIELD_TYPE_INPUT}
         ]
         super().__init__(title="Output", layout=layout, x=x, y=y, color=(50, 50, 70))
         
