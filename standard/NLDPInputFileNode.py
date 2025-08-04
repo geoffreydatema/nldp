@@ -13,7 +13,21 @@ class NLDPInputFileNode(NLDPNode):
 
     def evaluate(self, inputs):
         """
-        Passes the file path to the output.
+        Reads the contents of the specified .txt file and passes them to the output.
         """
-        value = inputs.get(0)
-        return {1: value}
+        file_path = inputs.get(0)
+        file_contents = None
+
+        if file_path and isinstance(file_path, str):
+            if file_path.lower().endswith('.txt'):
+                try:
+                    with open(file_path, 'r') as f:
+                        file_contents = f.read()
+                except FileNotFoundError:
+                    print(f"Error: File not found at '{file_path}'")
+                except Exception as e:
+                    print(f"An error occurred while reading the file: {e}")
+            else:
+                raise Exception("Error: File type not supported")
+        
+        return {1: file_contents}

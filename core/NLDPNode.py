@@ -201,7 +201,6 @@ class NLDPNode(QGraphicsItem):
         Creates and positions a proxy widget based on the layout definition.
         """
         widget_type = row_data.get('widget_type')
-        widget = None
         
         if widget_type == constants.WIDGET_LINEEDIT:
             line_edit = QLineEdit(str(row_data.get('default_value', '')))
@@ -216,7 +215,6 @@ class NLDPNode(QGraphicsItem):
                 }
             """)
             
-            # --- Add Validators based on data_type ---
             data_type = row_data.get('data_type')
             if data_type == constants.DTYPE_INT:
                 line_edit.setValidator(QIntValidator())
@@ -231,7 +229,6 @@ class NLDPNode(QGraphicsItem):
             proxy_widget.setGeometry(QRectF(self.width - field_width, y_pos - 7, field_width - 8, 15))
 
             line_edit.textChanged.connect(lambda text, i=index: update_callback(i, text))
-            # Connect the editingFinished signal to the view's cook_graph method
             if self.view:
                 line_edit.editingFinished.connect(self.view.cook_graph)
 
@@ -244,6 +241,8 @@ class NLDPNode(QGraphicsItem):
             widget.setFixedHeight(18)
             widget.textChanged().connect(lambda text, i=index: update_callback(i, text))
             if self.view:
+                # Connect both the custom signal and the standard editing finished signal
+                widget.path_selected.connect(self.view.cook_graph)
                 widget.line_edit.editingFinished.connect(self.view.cook_graph)
             
             proxy_widget = QGraphicsProxyWidget(self)

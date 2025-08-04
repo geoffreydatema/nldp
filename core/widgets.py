@@ -1,10 +1,14 @@
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QLineEdit, QPushButton, QFileDialog
+from PySide6.QtCore import Signal
 
 class NLDPFileBrowserWidget(QWidget):
     """
     A compound widget that includes a QLineEdit for a file path
     and a QPushButton to open a file dialog.
     """
+    # Custom signal that will be emitted when a file is chosen.
+    path_selected = Signal()
+
     def __init__(self, view=None, parent=None):
         super().__init__(parent)
         
@@ -29,6 +33,8 @@ class NLDPFileBrowserWidget(QWidget):
         file_path, _ = QFileDialog.getOpenFileName(self.view, "Select File")
         if file_path:
             self.line_edit.setText(file_path)
+            # Emit the custom signal to notify that a new path has been set.
+            self.path_selected.emit()
 
     def text(self):
         """
