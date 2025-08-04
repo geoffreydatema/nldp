@@ -143,6 +143,8 @@ class NLDPView(QGraphicsView):
                     print(f"--- Reading Values for: {node_under_cursor.title} ---")
                     print("Static Fields:", node_under_cursor.static_fields)
                     print("Output Values:", node_under_cursor.output_values)
+                    if hasattr(node_under_cursor, 'dead_end_values'):
+                        print("Dead-End Values:", node_under_cursor.dead_end_values)
                     print("---------------------------------------")
             else:
                 placeholder_action = menu.addAction("Placeholder Action")

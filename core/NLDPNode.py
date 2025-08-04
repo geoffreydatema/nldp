@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QGraphicsItem, QStyle, QLineEdit, QGraphicsProxyWidget
-from PySide6.QtGui import QColor, QPen, QPainterPath
+from PySide6.QtGui import QColor, QPen, QPainterPath, QIntValidator, QDoubleValidator
 from PySide6.QtCore import Qt, QRectF, QPointF
 from . import constants, NLDPWire, NLDPSocket
 
@@ -96,11 +96,13 @@ class NLDPNode(QGraphicsItem):
     def _gather_inputs(self):
         """
         Gathers all input values for the node, unifying all input types
-        into a single dictionary for the developer.
+        and performing data type conversion.
         """
         gathered_inputs = {}
         for i, row_data in enumerate(self.layout):
             field_type = row_data.get('field_type')
+            data_type = row_data.get('data_type')
+            value = None
 
             if field_type in [constants.FIELD_TYPE_INPUT, constants.FIELD_TYPE_DYNAMIC]:
                 socket = self.sockets.get(i)
@@ -111,15 +113,27 @@ class NLDPNode(QGraphicsItem):
                     
                     for j, s in upstream_node.sockets.items():
                         if s == upstream_socket:
-                            gathered_inputs[i] = upstream_node.output_values[j]['value']
+                            value = upstream_node.output_values[j]['value']
                             break
                 elif field_type == constants.FIELD_TYPE_DYNAMIC:
-                    gathered_inputs[i] = self.static_fields[i]['value']
-                else:
-                    gathered_inputs[i] = None
+                    value = self.static_fields[i]['value']
             
             elif field_type == constants.FIELD_TYPE_STATIC:
-                gathered_inputs[i] = self.static_fields[i]['value']
+                value = self.static_fields[i]['value']
+            
+            # --- Data Type Conversion ---
+            if value is not None:
+                try:
+                    if data_type == constants.DTYPE_INT:
+                        gathered_inputs[i] = int(float(value))
+                    elif data_type == constants.DTYPE_FLOAT:
+                        gathered_inputs[i] = float(value)
+                    else: # Default to string
+                        gathered_inputs[i] = str(value)
+                except (ValueError, TypeError):
+                    gathered_inputs[i] = None # Conversion failed
+            else:
+                gathered_inputs[i] = None
 
         return gathered_inputs
 
@@ -152,17 +166,18 @@ class NLDPNode(QGraphicsItem):
         for i, row_data in enumerate(self.layout):
             field_type = row_data.get('field_type')
             label = row_data.get('label', '')
+            data_type = row_data.get('data_type')
             y_pos = self.title_bar_height + (i * self.grid_size) + (self.grid_size / 2)
 
             if field_type == constants.FIELD_TYPE_INPUT:
                 socket = NLDPSocket(parent=self)
-                socket.set_properties(constants.SOCKET_TYPE_INPUT, label, QColor(255, 165, 0))
+                socket.set_properties(constants.SOCKET_TYPE_INPUT, label, data_type)
                 socket.setPos(0, y_pos)
                 self.sockets[i] = socket
 
             elif field_type == constants.FIELD_TYPE_DYNAMIC:
                 socket = NLDPSocket(parent=self)
-                socket.set_properties(constants.SOCKET_TYPE_INPUT, label, QColor(255, 165, 0))
+                socket.set_properties(constants.SOCKET_TYPE_INPUT, label, data_type)
                 socket.setPos(0, y_pos)
                 self.sockets[i] = socket
                 self.static_fields[i] = {'label': label, 'value': row_data.get('default_value')}
@@ -170,7 +185,7 @@ class NLDPNode(QGraphicsItem):
 
             elif field_type == constants.FIELD_TYPE_OUTPUT:
                 socket = NLDPSocket(parent=self)
-                socket.set_properties(constants.SOCKET_TYPE_OUTPUT, label, QColor(255, 165, 0))
+                socket.set_properties(constants.SOCKET_TYPE_OUTPUT, label, data_type)
                 socket.setPos(self.width, y_pos)
                 self.sockets[i] = socket
                 self.output_values[i] = {'label': label, 'value': None}
@@ -181,18 +196,28 @@ class NLDPNode(QGraphicsItem):
 
     def _create_proxy_widget(self, index, row_data, y_pos, update_callback):
         """
-        Creates and positions a QLineEdit proxy widget for a given row.
+        Creates and positions a proxy widget based on the layout definition.
         """
-        line_edit = QLineEdit(str(row_data.get('default_value', '')))
-        line_edit.setStyleSheet("QLineEdit { background-color: #444; color: #eee; border: 1px solid #555; }")
+        widget_type = row_data.get('widget_type')
         
-        proxy_widget = QGraphicsProxyWidget(self)
-        proxy_widget.setWidget(line_edit)
-        
-        field_width = self.width / 2 - 12
-        proxy_widget.setGeometry(QRectF(self.width - field_width - 8, y_pos - 10, field_width, 20))
+        if widget_type == constants.WIDGET_LINEEDIT:
+            line_edit = QLineEdit(str(row_data.get('default_value', '')))
+            line_edit.setStyleSheet("QLineEdit { background-color: #444; color: #eee; border: 1px solid #555; }")
+            
+            # --- Add Validators based on data_type ---
+            data_type = row_data.get('data_type')
+            if data_type == constants.DTYPE_INT:
+                line_edit.setValidator(QIntValidator())
+            elif data_type == constants.DTYPE_FLOAT:
+                line_edit.setValidator(QDoubleValidator())
 
-        line_edit.textChanged.connect(lambda text, i=index: update_callback(i, text))
+            proxy_widget = QGraphicsProxyWidget(self)
+            proxy_widget.setWidget(line_edit)
+            
+            field_width = self.width / 2 - 12
+            proxy_widget.setGeometry(QRectF(self.width - field_width - 8, y_pos - 10, field_width, 20))
+
+            line_edit.textChanged.connect(lambda text, i=index: update_callback(i, text))
 
     def _update_static_field_value(self, index, text):
         """

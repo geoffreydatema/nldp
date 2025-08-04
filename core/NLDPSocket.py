@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import QGraphicsItem
 from PySide6.QtGui import QColor
-from PySide6.QtCore import Qt, QRectF, QPointF
+from PySide6.QtCore import Qt, QPointF, QRectF
+from . import constants
 
 class NLDPSocket(QGraphicsItem):
     """
@@ -19,26 +20,30 @@ class NLDPSocket(QGraphicsItem):
 
         # --- Logical Properties (set by the parent node) ---
         self.socket_type = None
+        self.data_type = None
         self.connections = []
         self.label = ""
 
         # --- Visual Properties ---
         self.radius = radius
-        self.color_fill = QColor(255, 165, 0) # Default orange
+        self.color_fill = QColor(200, 200, 200) # Default grey
 
-    def set_properties(self, socket_type, label, color):
+    def set_properties(self, socket_type, label, data_type):
         """
         Sets the logical and visual properties of the socket.
 
         Args:
             socket_type (str): The logical type (e.g., SOCKET_TYPE_INPUT).
             label (str): The text label to be displayed next to the socket.
-            color (QColor): The fill color of the socket.
+            data_type (str): The data type this socket handles.
         """
         self.socket_type = socket_type
         self.label = label
-        if color:
-            self.color_fill = color
+        self.data_type = data_type
+        
+        # Set color based on data type
+        color_tuple = constants.DTYPE_COLORS.get(data_type, (200, 200, 200))
+        self.color_fill = QColor(*color_tuple)
 
     def boundingRect(self):
         """
