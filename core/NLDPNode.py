@@ -48,8 +48,7 @@ class NLDPNode(QGraphicsItem):
 
         # --- Data and UI Components ---
         self.sockets = {}
-        self.static_fields = {}
-        self.input_values = {}
+        self.static_fields = {} # Now stores values for both STATIC and DYNAMIC rows
         self.output_values = {}
         self._build_from_layout()
 
@@ -97,37 +96,33 @@ class NLDPNode(QGraphicsItem):
     def _gather_inputs(self):
         """
         Gathers all input values for the node, unifying all input types
-        (INPUT, DYNAMIC, and STATIC) into a single dictionary that will be
-        passed to the evaluate() method. This is the core of the abstraction
-        that simplifies node development.
+        into a single dictionary for the developer.
         """
         gathered_inputs = {}
         for i, row_data in enumerate(self.layout):
             row_type = row_data.get('type')
 
-            # Handle rows that can receive connections
             if row_type in [constants.ROW_TYPE_INPUT, constants.ROW_TYPE_DYNAMIC]:
                 socket = self.sockets.get(i)
-                # Check if a wire is connected
                 if socket and socket.connections:
-                    # If connected, recursively evaluate the upstream node to get its fresh output.
                     upstream_socket = socket.connections[0]
                     upstream_node = upstream_socket.parentItem()
                     upstream_node.cook()
                     
-                    # Find the corresponding output value on the upstream node
                     for j, s in upstream_node.sockets.items():
                         if s == upstream_socket:
                             gathered_inputs[i] = upstream_node.output_values[j]['value']
                             break
+                elif row_type == constants.ROW_TYPE_DYNAMIC:
+                    # If a dynamic input is not connected, use its static field value.
+                    gathered_inputs[i] = self.static_fields[i]['value']
                 else:
-                    # If not connected, use the local default value for this input row.
-                    gathered_inputs[i] = self.input_values[i]['value']
+                    # A pure input with no connection has no value.
+                    gathered_inputs[i] = None
             
-            # Handle rows that are static values only
             elif row_type == constants.ROW_TYPE_STATIC:
-                # For static fields, just use the value from the UI field.
                 gathered_inputs[i] = self.static_fields[i]['value']
+
         return gathered_inputs
 
     def _store_outputs(self, outputs):
@@ -166,15 +161,14 @@ class NLDPNode(QGraphicsItem):
                 socket.set_properties(constants.SOCKET_TYPE_INPUT, label, QColor(255, 165, 0))
                 socket.setPos(0, y_pos)
                 self.sockets[i] = socket
-                self.input_values[i] = {'label': label, 'value': None} # No default value
 
             elif row_type == constants.ROW_TYPE_DYNAMIC:
                 socket = NLDPSocket(parent=self)
                 socket.set_properties(constants.SOCKET_TYPE_INPUT, label, QColor(255, 165, 0))
                 socket.setPos(0, y_pos)
                 self.sockets[i] = socket
-                self.input_values[i] = {'label': label, 'value': row_data.get('default_value')}
-                self._create_proxy_widget(i, row_data, y_pos, self._update_input_value)
+                self.static_fields[i] = {'label': label, 'value': row_data.get('default_value')}
+                self._create_proxy_widget(i, row_data, y_pos, self._update_static_field_value)
 
             elif row_type == constants.ROW_TYPE_OUTPUT:
                 socket = NLDPSocket(parent=self)
@@ -204,16 +198,9 @@ class NLDPNode(QGraphicsItem):
 
     def _update_static_field_value(self, index, text):
         """
-        Updates the internal data model for a static field and marks the node as dirty.
+        Updates the internal data model for a static or dynamic field and marks the node as dirty.
         """
         self.static_fields[index]['value'] = text
-        self.mark_dirty()
-        
-    def _update_input_value(self, index, text):
-        """
-        Updates the internal data model for an input field and marks the node as dirty.
-        """
-        self.input_values[index]['value'] = text
         self.mark_dirty()
 
     def get_all_sockets(self):
