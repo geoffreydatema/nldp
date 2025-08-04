@@ -12,13 +12,16 @@ FIELD_TYPE_DYNAMIC = 5
 DTYPE_INT = 6
 DTYPE_FLOAT = 7
 DTYPE_STRING = 8
+DTYPE_FILEPATH = 9
 
 # --- Widget Type Constants ---
-WIDGET_LINEEDIT = 9
+WIDGET_LINEEDIT = 10
+WIDGET_FILE_BROWSER = 11
 
 # --- Data Type Colors ---
 DTYPE_COLORS = {
     DTYPE_INT: (60, 120, 216),    # Blue
     DTYPE_FLOAT: (40, 180, 120),   # Green
     DTYPE_STRING: (200, 80, 220),  # Magenta
+    DTYPE_FILEPATH: (220, 160, 40) # Orange
 }

@@ -2,7 +2,7 @@ from PySide6.QtWidgets import QApplication, QGraphicsView, QGraphicsPathItem, QM
 from PySide6.QtGui import QColor, QPainter, QPen, QPainterPath, QCursor
 from PySide6.QtCore import Qt, QRectF, QLineF, QPoint, QPointF, QEvent
 from . import constants, NLDPNode, NLDPWire, NLDPSocket
-from standard import NLDPInputFloatNode, NLDPOutputOutputNode, NLDPMathAddNode
+from standard import NLDPInputFloatNode, NLDPInputFileNode, NLDPOutputOutputNode, NLDPMathAddNode
 
 class NLDPView(QGraphicsView):
     """
@@ -164,14 +164,17 @@ class NLDPView(QGraphicsView):
             output_menu = menu.addMenu("Output")
             math_menu = menu.addMenu("Math")
             
-            value_node_action = input_menu.addAction("Value")
+            float_node_action = input_menu.addAction("Float")
+            file_node_action = input_menu.addAction("File")
             output_node_action = output_menu.addAction("Output")
             add_node_action = math_menu.addAction("Add")
             
             action = menu.exec(event.globalPos())
             
-            if action == value_node_action:
+            if action == float_node_action:
                 self.scene().addItem(NLDPInputFloatNode(x=scene_pos.x(), y=scene_pos.y(), view=self))
+            elif action == file_node_action:
+                self.scene().addItem(NLDPInputFileNode(x=scene_pos.x(), y=scene_pos.y(), view=self))
             elif action == output_node_action:
                 self.scene().addItem(NLDPOutputOutputNode(x=scene_pos.x(), y=scene_pos.y(), view=self))
             elif action == add_node_action:

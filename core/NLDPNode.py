@@ -2,6 +2,7 @@ from PySide6.QtWidgets import QGraphicsItem, QStyle, QLineEdit, QGraphicsProxyWi
 from PySide6.QtGui import QColor, QPen, QPainterPath, QIntValidator, QDoubleValidator
 from PySide6.QtCore import Qt, QRectF, QPointF
 from . import constants, NLDPWire, NLDPSocket
+from .widgets import NLDPFileBrowserWidget
 
 class NLDPNode(QGraphicsItem):
     """
@@ -11,15 +12,6 @@ class NLDPNode(QGraphicsItem):
     def __init__(self, title="New Node", layout=None, show_border=False, color=None, x=0, y=0, view=None):
         """
         Initializes the node.
-
-        Args:
-            title (str): The name to be displayed in the node's title bar.
-            layout (list[dict]): A list of dictionaries defining the node's rows.
-            show_border (bool): Whether to display the static design border.
-            color (tuple | list): An (R, G, B) tuple or list for the node's body color.
-            x (int | float): The initial x-position of the node in the scene.
-            y (int | float): The initial y-position of the node in the scene.
-            view (NLDPView): A reference to the parent view for connecting signals.
         """
         super().__init__()
 
@@ -209,10 +201,10 @@ class NLDPNode(QGraphicsItem):
         Creates and positions a proxy widget based on the layout definition.
         """
         widget_type = row_data.get('widget_type')
+        widget = None
         
         if widget_type == constants.WIDGET_LINEEDIT:
             line_edit = QLineEdit(str(row_data.get('default_value', '')))
-            # line_edit.setStyleSheet("QLineEdit { background-color: #444; color: #eee; border: 1px solid #555; font-size: 6pt; }")
             line_edit.setStyleSheet("""
                 QLineEdit { 
                     background-color: #444; 
@@ -231,7 +223,6 @@ class NLDPNode(QGraphicsItem):
             elif data_type == constants.DTYPE_FLOAT:
                 line_edit.setValidator(QDoubleValidator())
 
-
             proxy_widget = QGraphicsProxyWidget(self)
             proxy_widget.setWidget(line_edit)
             
@@ -243,6 +234,23 @@ class NLDPNode(QGraphicsItem):
             # Connect the editingFinished signal to the view's cook_graph method
             if self.view:
                 line_edit.editingFinished.connect(self.view.cook_graph)
+
+        elif widget_type == constants.WIDGET_FILE_BROWSER:
+            widget = NLDPFileBrowserWidget(view=self.view)
+            widget.setText(str(row_data.get('default_value', '')))
+            widget.line_edit.setStyleSheet("QLineEdit { background-color: #444; color: #eee; border: 1px solid #555; font-size: 8pt; padding: 0px; margin: 0px; }")
+            widget.browse_button.setStyleSheet("QPushButton { background-color: #555; color: #eee; border: 1px solid #666; font-size: 8pt; }")
+            
+            widget.setFixedHeight(18)
+            widget.textChanged().connect(lambda text, i=index: update_callback(i, text))
+            if self.view:
+                widget.line_edit.editingFinished.connect(self.view.cook_graph)
+            
+            proxy_widget = QGraphicsProxyWidget(self)
+            proxy_widget.setWidget(widget)
+            
+            field_width = self.width / 2 - 12
+            proxy_widget.setGeometry(QRectF(self.width - field_width - 8, y_pos - 9, field_width, 18))
 
     def _update_static_field_value(self, index, text):
         """
@@ -382,6 +390,4 @@ class NLDPNode(QGraphicsItem):
         """
         if self._is_dragging and event.button() == Qt.MouseButton.LeftButton:
             self._is_dragging = False
-            event.accept()
-            return
         super().mouseReleaseEvent(event)

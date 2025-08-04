@@ -16,4 +16,4 @@ class NLDPInputFloatNode(NLDPNode):
         Passes the static field value to the output.
         """
         value = inputs.get(0)
-        return {1: value} # Output is at row 1
+        return {1: value}
