@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QGraphicsItem, QStyle, QGraphicsProxyWidget
+from PySide6.QtWidgets import QGraphicsItem, QStyle, QLineEdit, QGraphicsProxyWidget
 from PySide6.QtGui import QColor, QPen, QPainterPath
 from PySide6.QtCore import Qt, QRectF, QPointF
 from . import constants, NLDPWire, NLDPSocket
@@ -195,41 +195,38 @@ class NLDPNode(QGraphicsItem):
             elif field_type == constants.FIELD_TYPE_STATIC:
                 self.static_fields[i] = {'label': label, 'value': row_data.get('default_value', '')}
                 self._create_proxy_widget(i, row_data, y_pos, self._update_static_field_value)
+            
+            elif field_type == 'custom_widget':
+                self._create_proxy_widget(i, row_data, y_pos)
 
-    def _create_proxy_widget(self, index, row_data, y_pos, update_callback):
+    def _create_proxy_widget(self, index, row_data, y_pos, update_callback=None):
         """
         Creates and positions a proxy widget based on the layout definition.
         """
         widget_type = row_data.get('widget_type')
-        widget = None
-        proxy_widget = None
+        widget = row_data.get('widget') # Check for a pre-made widget
         
-        if widget_type == constants.WIDGET_LINEEDIT:
+        if widget is None and widget_type == constants.WIDGET_LINEEDIT:
             widget = NLDPLineEditWidget(default_value=row_data.get('default_value', ''), data_type=row_data.get('data_type'))
-            
-            proxy_widget = QGraphicsProxyWidget(self)
-            proxy_widget.setWidget(widget)
-            
-            field_width = self.width / 3
-            proxy_widget.setGeometry(QRectF(self.width - field_width, y_pos - 7, field_width - 8, 15))
-
             widget.textChanged.connect(lambda text, i=index: update_callback(i, text))
             if self.view:
                 widget.editingFinished.connect(self.view.cook_graph)
 
-        elif widget_type == constants.WIDGET_FILE_BROWSER:
+        elif widget is None and widget_type == constants.WIDGET_FILE_BROWSER:
             widget = NLDPFileBrowserWidget(view=self.view)
-
-            proxy_widget = QGraphicsProxyWidget(self)
-            proxy_widget.setWidget(widget)
-            
-            field_width = self.width / 3
-            proxy_widget.setGeometry(QRectF(self.width - field_width, y_pos - 7, field_width - 8, 15))
-
+            widget.setText(str(row_data.get('default_value', '')))
             widget.textChanged().connect(lambda text, i=index: update_callback(i, text))
             if self.view:
                 widget.path_selected.connect(self.view.cook_graph)
                 widget.line_edit.editingFinished.connect(self.view.cook_graph)
+
+        if widget:
+            proxy_widget = QGraphicsProxyWidget(self)
+            proxy_widget.setWidget(widget)
+            
+            field_width = self.width / 2
+            widget.setFixedHeight(15)
+            proxy_widget.setGeometry(QRectF(self.width - field_width, y_pos - 7, field_width - 8, 15))
 
     def _update_static_field_value(self, index, text):
         """

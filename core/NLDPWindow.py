@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import QMainWindow, QGraphicsScene
 from PySide6.QtGui import QColor
 from core import NLDPView
-from standard import NLDPInputFloatNode, NLDPInputFileNode, NLDPOutputOutputNode, NLDPMathAddNode
+from standard import NLDPInputFloatNode, NLDPInputFileNode, NLDPOutputOutputNode, NLDPOutputFileNode, NLDPMathAddNode
 
 class NLDPWindow(QMainWindow):
     """
@@ -35,3 +35,4 @@ class NLDPWindow(QMainWindow):
         self.scene.addItem(NLDPInputFileNode(x=-8*32, y=8*16, view=self.view))
         self.scene.addItem(NLDPMathAddNode(x=0, y=0, view=self.view))
         self.scene.addItem(NLDPOutputOutputNode(x=8*32, y=0, view=self.view))
+        self.scene.addItem(NLDPOutputFileNode(x=8*32, y=8*16, view=self.view))

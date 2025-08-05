@@ -65,7 +65,7 @@ class NLDPFileBrowserWidget(QWidget):
             QPushButton {
                 background-color: #555;
                 color: #eee;
-                border: 1px solid #666;
+                border: 0;
                 font-size: 8pt;
             }
         """)
@@ -105,3 +105,19 @@ class NLDPFileBrowserWidget(QWidget):
         Returns the textChanged signal from the line edit.
         """
         return self.line_edit.textChanged
+
+class NLDPExecuteButtonWidget(QPushButton):
+    """
+    A styled QPushButton for triggering actions like file writes.
+    """
+    def __init__(self, text="Execute", parent=None):
+        super().__init__(text, parent)
+
+        self.setStyleSheet("""
+            QPushButton { 
+                background-color: #555; 
+                color: #eee; 
+                border: 0; 
+                font-size: 8pt; 
+            }
+        """)
