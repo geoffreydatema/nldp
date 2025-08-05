@@ -9,7 +9,7 @@ class NLDPInputFileNode(NLDPNode):
             {'field_type': constants.FIELD_TYPE_STATIC, 'label': 'File Path', 'data_type': constants.DTYPE_FILEPATH, 'widget_type': constants.WIDGET_FILE_BROWSER, 'default_value': ''},
             {'field_type': constants.FIELD_TYPE_OUTPUT, 'label': 'Data', 'data_type': constants.DTYPE_STRING}
         ]
-        super().__init__(**kwargs, title="File", layout=layout, x=x, y=y)
+        super().__init__(**kwargs, title="File", layout=layout, x=x, y=y, width=12)
 
     def evaluate(self, inputs):
         """

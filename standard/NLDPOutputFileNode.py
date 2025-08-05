@@ -14,7 +14,7 @@ class NLDPOutputFileNode(NLDPNode):
             {'field_type': constants.FIELD_TYPE_STATIC, 'label': 'File Path', 'data_type': constants.DTYPE_STRING, 'widget_type': constants.WIDGET_FILE_BROWSER, 'default_value': ''},
             {'field_type': 'custom_widget', 'widget': self.execute_button}
         ]
-        super().__init__(**kwargs, title="Write File", layout=layout, x=x, y=y, color=(70, 50, 50))
+        super().__init__(**kwargs, title="Write File", layout=layout, x=x, y=y, color=(70, 50, 50), width=12)
         
         # This is the internal, "hidden" member for the final result.
         self.dead_end_values = []
