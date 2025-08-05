@@ -1,8 +1,8 @@
-from PySide6.QtWidgets import QGraphicsItem, QStyle, QLineEdit, QGraphicsProxyWidget
-from PySide6.QtGui import QColor, QPen, QPainterPath, QIntValidator, QDoubleValidator
+from PySide6.QtWidgets import QGraphicsItem, QStyle, QGraphicsProxyWidget
+from PySide6.QtGui import QColor, QPen, QPainterPath
 from PySide6.QtCore import Qt, QRectF, QPointF
 from . import constants, NLDPWire, NLDPSocket
-from .widgets import NLDPFileBrowserWidget
+from .widgets import NLDPLineEditWidget, NLDPFileBrowserWidget
 
 class NLDPNode(QGraphicsItem):
     """
@@ -201,55 +201,35 @@ class NLDPNode(QGraphicsItem):
         Creates and positions a proxy widget based on the layout definition.
         """
         widget_type = row_data.get('widget_type')
+        widget = None
+        proxy_widget = None
         
         if widget_type == constants.WIDGET_LINEEDIT:
-            line_edit = QLineEdit(str(row_data.get('default_value', '')))
-            line_edit.setStyleSheet("""
-                QLineEdit { 
-                    background-color: #444; 
-                    color: #eee; 
-                    border: 1px solid #555; 
-                    font-size: 8pt; 
-                    padding: 0px;
-                    margin: 0px;
-                }
-            """)
-            
-            data_type = row_data.get('data_type')
-            if data_type == constants.DTYPE_INT:
-                line_edit.setValidator(QIntValidator())
-            elif data_type == constants.DTYPE_FLOAT:
-                line_edit.setValidator(QDoubleValidator())
-
-            proxy_widget = QGraphicsProxyWidget(self)
-            proxy_widget.setWidget(line_edit)
-            
-            field_width = self.width / 3
-            line_edit.setFixedHeight(15)
-            proxy_widget.setGeometry(QRectF(self.width - field_width, y_pos - 7, field_width - 8, 15))
-
-            line_edit.textChanged.connect(lambda text, i=index: update_callback(i, text))
-            if self.view:
-                line_edit.editingFinished.connect(self.view.cook_graph)
-
-        elif widget_type == constants.WIDGET_FILE_BROWSER:
-            widget = NLDPFileBrowserWidget(view=self.view)
-            widget.setText(str(row_data.get('default_value', '')))
-            widget.line_edit.setStyleSheet("QLineEdit { background-color: #444; color: #eee; border: 1px solid #555; font-size: 8pt; padding: 0px; margin: 0px; }")
-            widget.browse_button.setStyleSheet("QPushButton { background-color: #555; color: #eee; border: 1px solid #666; font-size: 8pt; }")
-            
-            widget.setFixedHeight(18)
-            widget.textChanged().connect(lambda text, i=index: update_callback(i, text))
-            if self.view:
-                # Connect both the custom signal and the standard editing finished signal
-                widget.path_selected.connect(self.view.cook_graph)
-                widget.line_edit.editingFinished.connect(self.view.cook_graph)
+            widget = NLDPLineEditWidget(default_value=row_data.get('default_value', ''), data_type=row_data.get('data_type'))
             
             proxy_widget = QGraphicsProxyWidget(self)
             proxy_widget.setWidget(widget)
             
-            field_width = self.width / 2 - 12
-            proxy_widget.setGeometry(QRectF(self.width - field_width - 8, y_pos - 9, field_width, 18))
+            field_width = self.width / 3
+            proxy_widget.setGeometry(QRectF(self.width - field_width, y_pos - 7, field_width - 8, 15))
+
+            widget.textChanged.connect(lambda text, i=index: update_callback(i, text))
+            if self.view:
+                widget.editingFinished.connect(self.view.cook_graph)
+
+        elif widget_type == constants.WIDGET_FILE_BROWSER:
+            widget = NLDPFileBrowserWidget(view=self.view)
+
+            proxy_widget = QGraphicsProxyWidget(self)
+            proxy_widget.setWidget(widget)
+            
+            field_width = self.width / 3
+            proxy_widget.setGeometry(QRectF(self.width - field_width, y_pos - 7, field_width - 8, 15))
+
+            widget.textChanged().connect(lambda text, i=index: update_callback(i, text))
+            if self.view:
+                widget.path_selected.connect(self.view.cook_graph)
+                widget.line_edit.editingFinished.connect(self.view.cook_graph)
 
     def _update_static_field_value(self, index, text):
         """
