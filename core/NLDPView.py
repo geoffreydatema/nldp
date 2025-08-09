@@ -2,7 +2,7 @@ from PySide6.QtWidgets import QApplication, QGraphicsView, QGraphicsPathItem, QM
 from PySide6.QtGui import QColor, QPainter, QPen, QPainterPath, QCursor
 from PySide6.QtCore import Qt, QRectF, QLineF, QPoint, QPointF, QEvent
 from . import constants, NLDPNode, NLDPWire, NLDPSocket
-from standard import NLDPInputFloatNode, NLDPInputFileNode, NLDPOutputOutputNode, NLDPOutputFileNode, NLDPMathAddNode, NLDPInputUSDFileNode
+from standard import NLDPInputFloatNode, NLDPInputFileNode, NLDPOutputOutputNode, NLDPOutputFileNode, NLDPMathAddNode, NLDPInputUSDFileNode, NLDPUSDAssetConstructNode, NLDPOutputUSDFileNode
 
 class NLDPView(QGraphicsView):
     """
@@ -163,13 +163,16 @@ class NLDPView(QGraphicsView):
             input_menu = menu.addMenu("Input")
             output_menu = menu.addMenu("Output")
             math_menu = menu.addMenu("Math")
+            usd_menu = menu.addMenu("USD")
             
             float_node_action = input_menu.addAction("Float")
             input_file_node_action = input_menu.addAction("File Read")
             input_usd_file_node_action = input_menu.addAction("USD File Read")
             output_node_action = output_menu.addAction("Output")
             output_file_node_action = output_menu.addAction("File Write")
+            output_usd_file_node_action = output_menu.addAction("USD File Write")
             add_node_action = math_menu.addAction("Add")
+            usd_asset_construct_node_action = usd_menu.addAction("USD Asset Construct")
             
             action = menu.exec(event.globalPos())
             
@@ -181,10 +184,14 @@ class NLDPView(QGraphicsView):
                 self.scene().addItem(NLDPInputUSDFileNode(x=scene_pos.x(), y=scene_pos.y(), view=self))
             elif action == output_node_action:
                 self.scene().addItem(NLDPOutputOutputNode(x=scene_pos.x(), y=scene_pos.y(), view=self))
+            elif action == output_usd_file_node_action:
+                self.scene().addItem(NLDPOutputUSDFileNode(x=scene_pos.x(), y=scene_pos.y(), view=self))
             elif action == output_file_node_action:
                 self.scene().addItem(NLDPOutputFileNode(x=scene_pos.x(), y=scene_pos.y(), view=self))
             elif action == add_node_action:
                 self.scene().addItem(NLDPMathAddNode(x=scene_pos.x(), y=scene_pos.y(), view=self))
+            elif action == usd_asset_construct_node_action:
+                self.scene().addItem(NLDPUSDAssetConstructNode(x=scene_pos.x(), y=scene_pos.y(), view=self))
 
     def _evaluate_graph(self):
         """

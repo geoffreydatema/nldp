@@ -2,5 +2,7 @@ from .NLDPInputFloatNode import NLDPInputFloatNode
 from .NLDPInputFileNode import NLDPInputFileNode
 from .NLDPOutputOutputNode import NLDPOutputOutputNode
 from .NLDPOutputFileNode import NLDPOutputFileNode
+from .NLDPOutputUSDFileNode import NLDPOutputUSDFileNode
 from .NLDPMathAddNode import NLDPMathAddNode
+from .NLDPUSDAssetConstructNode import NLDPUSDAssetConstructNode
 from .NLDPInputUSDFileNode import NLDPInputUSDFileNode
