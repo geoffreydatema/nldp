@@ -16,5 +16,10 @@ class NLDPUSDAssetConstructNode(NLDPNode):
         """
         Constructs a USD asset from an asset definition (locators) and geometry.
         """
-        print(inputs)
-        return {}
+        stage = inputs[0]
+        high_res = inputs[1].GetRootLayer().realPath
+        locator = stage.GetPrimAtPath("/root/Empty")
+        locator.GetReferences().ClearReferences()
+        locator.GetReferences().AddReference(high_res)
+        
+        return {2: stage}
