@@ -130,6 +130,8 @@ class NLDPNode(QGraphicsItem):
                         gathered_inputs[i] = int(float(value))
                     elif data_type == constants.DTYPE_FLOAT:
                         gathered_inputs[i] = float(value)
+                    elif data_type == constants.DTYPE_FILE:
+                        gathered_inputs[i] = value
                     else: # Default to string
                         gathered_inputs[i] = str(value)
                 except (ValueError, TypeError):
