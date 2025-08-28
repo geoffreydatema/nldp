@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QGraphicsItem
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QPainterPath
 from PySide6.QtCore import Qt, QPointF, QRectF
 from . import constants
 
@@ -21,25 +21,24 @@ class NLDPSocket(QGraphicsItem):
         # --- Logical Properties (set by the parent node) ---
         self.socket_type = None
         self.data_type = None
+        self.field_type = None
         self.connections = []
         self.label = ""
+        self.socket_shape = constants.SOCKET_SHAPE_CIRCLE # Default shape
 
         # --- Visual Properties ---
         self.radius = radius
         self.color_fill = QColor(200, 200, 200) # Default grey
 
-    def set_properties(self, socket_type, label, data_type):
+    def set_properties(self, socket_type, label, data_type, field_type, shape=constants.SOCKET_SHAPE_CIRCLE):
         """
         Sets the logical and visual properties of the socket.
-
-        Args:
-            socket_type (str): The logical type (e.g., SOCKET_TYPE_INPUT).
-            label (str): The text label to be displayed next to the socket.
-            data_type (str): The data type this socket handles.
         """
         self.socket_type = socket_type
         self.label = label
         self.data_type = data_type
+        self.field_type = field_type
+        self.socket_shape = shape
         
         # Set color based on data type
         color_tuple = constants.DTYPE_COLORS.get(data_type, (200, 200, 200))
@@ -49,13 +48,23 @@ class NLDPSocket(QGraphicsItem):
         """
         Returns the bounding rectangle of the socket.
         """
-        return QRectF(-self.radius, -self.radius,
-                      self.radius * 2, self.radius * 2)
+        if self.socket_shape == constants.SOCKET_SHAPE_PILL:
+            return QRectF(-self.radius * 1.5, -self.radius,
+                          self.radius * 3, self.radius * 2)
+        else: # Circle
+            return QRectF(-self.radius, -self.radius,
+                          self.radius * 2, self.radius * 2)
 
     def paint(self, painter, option, widget=None):
         """
-        Draws the socket circle.
+        Draws the socket.
         """
         painter.setBrush(self.color_fill)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawEllipse(QPointF(0, 0), self.radius, self.radius)
+
+        if self.socket_shape == constants.SOCKET_SHAPE_PILL:
+            path = QPainterPath()
+            path.addRoundedRect(self.boundingRect(), self.radius, self.radius)
+            painter.drawPath(path)
+        else: # Circle
+            painter.drawEllipse(QPointF(0, 0), self.radius, self.radius)

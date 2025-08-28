@@ -514,7 +514,8 @@ class NLDPView(QGraphicsView):
                 
                 input_socket = end_item if end_item.socket_type == constants.SOCKET_TYPE_INPUT else self.start_socket
                 
-                if input_socket.connections:
+                # Only enforce single connection for non-multi-input sockets
+                if input_socket.field_type != constants.FIELD_TYPE_MULTI_INPUT and input_socket.connections:
                     old_partner_socket = input_socket.connections[0]
                     for item in self.scene().items():
                         if isinstance(item, NLDPWire) and \

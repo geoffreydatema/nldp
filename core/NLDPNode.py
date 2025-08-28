@@ -106,17 +106,27 @@ class NLDPNode(QGraphicsItem):
             data_type = row_data.get('data_type')
             value = None
 
-            if field_type in [constants.FIELD_TYPE_INPUT, constants.FIELD_TYPE_DYNAMIC]:
+            if field_type in [constants.FIELD_TYPE_INPUT, constants.FIELD_TYPE_DYNAMIC, constants.FIELD_TYPE_MULTI_INPUT]:
                 socket = self.sockets.get(i)
                 if socket and socket.connections:
-                    upstream_socket = socket.connections[0]
-                    upstream_node = upstream_socket.parentItem()
-                    upstream_node.cook()
-                    
-                    for j, s in upstream_node.sockets.items():
-                        if s == upstream_socket:
-                            value = upstream_node.output_values[j]['value']
-                            break
+                    if field_type == constants.FIELD_TYPE_MULTI_INPUT:
+                        # For multi-inputs, gather values from all connections into a list
+                        value = []
+                        for upstream_socket in socket.connections:
+                            upstream_node = upstream_socket.parentItem()
+                            upstream_node.cook()
+                            for j, s in upstream_node.sockets.items():
+                                if s == upstream_socket:
+                                    value.append(upstream_node.output_values[j]['value'])
+                                    break
+                    else: # Single input
+                        upstream_socket = socket.connections[0]
+                        upstream_node = upstream_socket.parentItem()
+                        upstream_node.cook()
+                        for j, s in upstream_node.sockets.items():
+                            if s == upstream_socket:
+                                value = upstream_node.output_values[j]['value']
+                                break
                 elif field_type == constants.FIELD_TYPE_DYNAMIC:
                     value = self.static_fields[i]['value']
             
@@ -168,7 +178,6 @@ class NLDPNode(QGraphicsItem):
         Creates sockets and UI fields based on the layout definition.
         """
         for i, row_data in enumerate(self.layout):
-            print(row_data)
             field_type = row_data.get('field_type')
             if field_type is None: continue # Skip spacers
             
@@ -178,21 +187,27 @@ class NLDPNode(QGraphicsItem):
 
             if field_type == constants.FIELD_TYPE_INPUT:
                 socket = NLDPSocket(parent=self)
-                socket.set_properties(constants.SOCKET_TYPE_INPUT, label, data_type)
+                socket.set_properties(constants.SOCKET_TYPE_INPUT, label, data_type, field_type)
                 socket.setPos(0, y_pos)
                 self.sockets[i] = socket
 
             elif field_type == constants.FIELD_TYPE_DYNAMIC:
                 socket = NLDPSocket(parent=self)
-                socket.set_properties(constants.SOCKET_TYPE_INPUT, label, data_type)
+                socket.set_properties(constants.SOCKET_TYPE_INPUT, label, data_type, field_type)
                 socket.setPos(0, y_pos)
                 self.sockets[i] = socket
                 self.static_fields[i] = {'label': label, 'value': row_data.get('default_value')}
                 self._create_proxy_widget(i, row_data, y_pos, self._update_static_field_value)
 
+            elif field_type == constants.FIELD_TYPE_MULTI_INPUT:
+                socket = NLDPSocket(parent=self)
+                socket.set_properties(constants.SOCKET_TYPE_INPUT, label, data_type, field_type, shape=constants.SOCKET_SHAPE_PILL)
+                socket.setPos(0, y_pos)
+                self.sockets[i] = socket
+
             elif field_type == constants.FIELD_TYPE_OUTPUT:
                 socket = NLDPSocket(parent=self)
-                socket.set_properties(constants.SOCKET_TYPE_OUTPUT, label, data_type)
+                socket.set_properties(constants.SOCKET_TYPE_OUTPUT, label, data_type, field_type)
                 socket.setPos(self.width, y_pos)
                 self.sockets[i] = socket
                 self.output_values[i] = {'label': label, 'value': None}
@@ -229,7 +244,7 @@ class NLDPNode(QGraphicsItem):
             proxy_widget = QGraphicsProxyWidget(self)
             proxy_widget.setWidget(widget)
             
-            field_width = self.width / 2
+            field_width = self.width / 3
             widget.setFixedHeight(15)
             proxy_widget.setGeometry(QRectF(self.width - field_width, y_pos - 7, field_width - 8, 15))
 
@@ -306,7 +321,7 @@ class NLDPNode(QGraphicsItem):
             row_rect = QRectF(0, y_pos, self.width, self.grid_size)
             label = row_data.get('label', '')
 
-            if row_data['field_type'] in [constants.FIELD_TYPE_INPUT, constants.FIELD_TYPE_DYNAMIC]:
+            if row_data['field_type'] in [constants.FIELD_TYPE_INPUT, constants.FIELD_TYPE_DYNAMIC, constants.FIELD_TYPE_MULTI_INPUT]:
                 painter.drawText(row_rect.adjusted(12, 0, 0, 0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, label)
             
             elif row_data['field_type'] == constants.FIELD_TYPE_OUTPUT:
