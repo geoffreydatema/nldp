@@ -2,7 +2,7 @@ from PySide6.QtWidgets import QApplication, QGraphicsView, QGraphicsPathItem, QM
 from PySide6.QtGui import QColor, QPainter, QPen, QPainterPath, QCursor
 from PySide6.QtCore import Qt, QRectF, QLineF, QPoint, QPointF, QEvent
 from . import constants, NLDPNode, NLDPWire, NLDPSocket
-from standard import NLDPInputFloatNode, NLDPInputFileNode, NLDPOutputOutputNode, NLDPOutputFileNode, NLDPMathAddNode, NLDPInputUSDFileNode, NLDPUSDAssetConstructNode, NLDPOutputUSDFileNode
+from standard import NLDPInputFloatNode, NLDPInputFileNode, NLDPOutputOutputNode, NLDPOutputFileNode, NLDPMathAddNode, NLDPMathSumNode, NLDPInputUSDFileNode, NLDPUSDAssetConstructNode, NLDPOutputUSDFileNode
 
 class NLDPView(QGraphicsView):
     """
@@ -172,6 +172,7 @@ class NLDPView(QGraphicsView):
             output_file_node_action = output_menu.addAction("File Write")
             output_usd_file_node_action = output_menu.addAction("USD File Write")
             add_node_action = math_menu.addAction("Add")
+            sum_node_action = math_menu.addAction("Sum")
             usd_asset_construct_node_action = usd_menu.addAction("USD Asset Construct")
             
             action = menu.exec(event.globalPos())
@@ -190,6 +191,8 @@ class NLDPView(QGraphicsView):
                 self.scene().addItem(NLDPOutputFileNode(x=scene_pos.x(), y=scene_pos.y(), view=self))
             elif action == add_node_action:
                 self.scene().addItem(NLDPMathAddNode(x=scene_pos.x(), y=scene_pos.y(), view=self))
+            elif action == sum_node_action:
+                self.scene().addItem(NLDPMathSumNode(x=scene_pos.x(), y=scene_pos.y(), view=self))
             elif action == usd_asset_construct_node_action:
                 self.scene().addItem(NLDPUSDAssetConstructNode(x=scene_pos.x(), y=scene_pos.y(), view=self))
 

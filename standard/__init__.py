@@ -4,5 +4,6 @@ from .NLDPOutputOutputNode import NLDPOutputOutputNode
 from .NLDPOutputFileNode import NLDPOutputFileNode
 from .NLDPOutputUSDFileNode import NLDPOutputUSDFileNode
 from .NLDPMathAddNode import NLDPMathAddNode
+from .NLDPMathSumNode import NLDPMathSumNode
 from .NLDPUSDAssetConstructNode import NLDPUSDAssetConstructNode
 from .NLDPInputUSDFileNode import NLDPInputUSDFileNode

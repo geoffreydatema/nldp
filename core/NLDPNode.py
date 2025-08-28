@@ -168,7 +168,10 @@ class NLDPNode(QGraphicsItem):
         Creates sockets and UI fields based on the layout definition.
         """
         for i, row_data in enumerate(self.layout):
+            print(row_data)
             field_type = row_data.get('field_type')
+            if field_type is None: continue # Skip spacers
+            
             label = row_data.get('label', '')
             data_type = row_data.get('data_type')
             y_pos = self.title_bar_height + (i * self.grid_size) + (self.grid_size / 2)
@@ -296,6 +299,9 @@ class NLDPNode(QGraphicsItem):
         painter.setFont(font)
         
         for i, row_data in enumerate(self.layout):
+            field_type = row_data.get('field_type')
+            if field_type is None: continue # Skip spacers
+
             y_pos = self.title_bar_height + (i * self.grid_size)
             row_rect = QRectF(0, y_pos, self.width, self.grid_size)
             label = row_data.get('label', '')
