@@ -148,7 +148,6 @@ class NLDPNode(QGraphicsItem):
                     gathered_inputs[i] = None # Conversion failed
             else:
                 gathered_inputs[i] = None
-
         return gathered_inputs
 
     def _store_outputs(self, outputs):
@@ -244,7 +243,7 @@ class NLDPNode(QGraphicsItem):
             proxy_widget = QGraphicsProxyWidget(self)
             proxy_widget.setWidget(widget)
             
-            field_width = self.width / 3
+            field_width = self.width / 2
             widget.setFixedHeight(15)
             proxy_widget.setGeometry(QRectF(self.width - field_width, y_pos - 7, field_width - 8, 15))
 

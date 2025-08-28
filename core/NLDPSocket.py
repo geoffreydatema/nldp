@@ -49,8 +49,8 @@ class NLDPSocket(QGraphicsItem):
         Returns the bounding rectangle of the socket.
         """
         if self.socket_shape == constants.SOCKET_SHAPE_PILL:
-            return QRectF(-self.radius * 1.5, -self.radius,
-                          self.radius * 3, self.radius * 2)
+            return QRectF(-self.radius * 2, -self.radius,
+                          self.radius * 4, self.radius * 2)
         else: # Circle
             return QRectF(-self.radius, -self.radius,
                           self.radius * 2, self.radius * 2)
@@ -66,5 +66,5 @@ class NLDPSocket(QGraphicsItem):
             path = QPainterPath()
             path.addRoundedRect(self.boundingRect(), self.radius, self.radius)
             painter.drawPath(path)
-        else: # Circle
+        else:
             painter.drawEllipse(QPointF(0, 0), self.radius, self.radius)
