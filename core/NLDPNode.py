@@ -9,7 +9,7 @@ class NLDPNode(QGraphicsItem):
     Represents a single node in the NLDP graph.
     Builds its visual layout and sockets from a structured 'layout' list.
     """
-    def __init__(self, title="New Node", layout=None, show_border=False, color=None, x=0, y=0, width=8, view=None):
+    def __init__(self, title="New Node", layout=None, show_border=False, color=None, x=0, y=0, width=8, extra_height=0, view=None):
         """
         Initializes the node.
         """
@@ -20,7 +20,7 @@ class NLDPNode(QGraphicsItem):
         self.layout = layout if layout is not None else []
         self.width = width * self.grid_size # Default width, can be overridden later
         # Height is determined by the title bar + number of rows in the layout
-        self.height = (len(self.layout) + 1) * self.grid_size
+        self.height = ((len(self.layout) + 1) * self.grid_size) + (extra_height * self.grid_size)
         self.title = title
         self.show_border = show_border
         self.view = view
