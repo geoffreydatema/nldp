@@ -95,6 +95,34 @@ class NLDPNode(QGraphicsItem):
         # This base method does nothing and returns an empty dictionary.
         return {}
 
+    def _convert_value(self, value, data_type):
+        """
+        Converts a single value or a list of values to the specified data type.
+        """
+        if value is None:
+            return None
+
+        # If the value is a list (from a multi-input), convert each item.
+        if isinstance(value, list):
+            converted_list = []
+            for item in value:
+                # Recursively call this function for each item in the list
+                converted_list.append(self._convert_value(item, data_type))
+            return converted_list
+
+        # Handle single values.
+        try:
+            if data_type == constants.DTYPE_INT:
+                return int(float(value))
+            elif data_type == constants.DTYPE_FLOAT:
+                return float(value)
+            elif data_type == constants.DTYPE_FILE:
+                return value
+            else:
+                return str(value)
+        except (ValueError, TypeError):
+            return None
+
     def _gather_inputs(self):
         """
         Gathers all input values for the node, unifying all input types
@@ -110,7 +138,6 @@ class NLDPNode(QGraphicsItem):
                 socket = self.sockets.get(i)
                 if socket and socket.connections:
                     if field_type == constants.FIELD_TYPE_MULTI_INPUT:
-                        # For multi-inputs, gather values from all connections into a list
                         value = []
                         for upstream_socket in socket.connections:
                             upstream_node = upstream_socket.parentItem()
@@ -133,21 +160,8 @@ class NLDPNode(QGraphicsItem):
             elif field_type == constants.FIELD_TYPE_STATIC:
                 value = self.static_fields[i]['value']
             
-            # --- Data Type Conversion ---
-            if value is not None:
-                try:
-                    if data_type == constants.DTYPE_INT:
-                        gathered_inputs[i] = int(float(value))
-                    elif data_type == constants.DTYPE_FLOAT:
-                        gathered_inputs[i] = float(value)
-                    elif data_type == constants.DTYPE_FILE:
-                        gathered_inputs[i] = value
-                    else: # Default to string
-                        gathered_inputs[i] = str(value)
-                except (ValueError, TypeError):
-                    gathered_inputs[i] = None # Conversion failed
-            else:
-                gathered_inputs[i] = None
+            # Use the new helper function for robust data type conversion
+            gathered_inputs[i] = self._convert_value(value, data_type)
         return gathered_inputs
 
     def _store_outputs(self, outputs):

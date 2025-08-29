@@ -15,6 +15,7 @@ class NLDPMathSumNode(NLDPNode):
         """
         Sums all input values.
         """
-        print("evaluating sum")
-        print(inputs)
-        return {1: None}
+        sum = 0
+        for number in inputs[0]:
+            sum += number
+        return {1: sum}
